@@ -1,17 +1,17 @@
-import {config as dotEnvConfig} from "dotenv";
-import "@nomiclabs/hardhat-waffle";
-import "@nomiclabs/hardhat-ethers";
-import "@nomiclabs/hardhat-etherscan";
-import "@nomiclabs/hardhat-web3";
-import "@nomiclabs/hardhat-solhint";
-import "@typechain/hardhat";
-import "hardhat-contract-sizer";
-import "hardhat-gas-reporter";
-import "hardhat-tracer";
-import "solidity-coverage"
-import "hardhat-abi-exporter"
-import {task} from "hardhat/config";
-import {deployContract} from "./scripts/deploy/DeployContract";
+import { config as dotEnvConfig } from 'dotenv';
+import '@nomiclabs/hardhat-waffle';
+import '@nomiclabs/hardhat-ethers';
+import '@nomiclabs/hardhat-etherscan';
+import '@nomiclabs/hardhat-web3';
+import '@nomiclabs/hardhat-solhint';
+import '@typechain/hardhat';
+import 'hardhat-contract-sizer';
+import 'hardhat-gas-reporter';
+import 'hardhat-tracer';
+import 'solidity-coverage';
+import 'hardhat-abi-exporter';
+import { task } from 'hardhat/config';
+import { deployContract } from './scripts/deploy/DeployContract';
 
 dotEnvConfig();
 // tslint:disable-next-line:no-var-requires
@@ -19,81 +19,92 @@ const argv = require('yargs/yargs')()
   .env('TETU')
   .options({
     hardhatChainId: {
-      type: "number",
-      default: 31337
+      type: 'number',
+      default: 31337,
     },
     maticRpcUrl: {
-      type: "string",
+      type: 'string',
     },
     ftmRpcUrl: {
-      type: "string",
+      type: 'string',
     },
     ethRpcUrl: {
-      type: "string",
-      default: ''
+      type: 'string',
+      default: '',
+    },
+    baseRpcUrl: {
+      type: 'string',
+      default: '',
     },
     bscRpcUrl: {
-      type: "string",
-      default: 'https://bsc-dataseed.binance.org/'
+      type: 'string',
+      default: 'https://bsc-dataseed.binance.org/',
     },
     goerliRpcUrl: {
-      type: "string",
-      default: ''
+      type: 'string',
+      default: '',
     },
     sepoliaRpcUrl: {
-      type: "string",
-      default: ''
+      type: 'string',
+      default: '',
     },
     infuraKey: {
-      type: "string",
+      type: 'string',
     },
     networkScanKey: {
-      type: "string",
+      type: 'string',
     },
     networkScanKeyMatic: {
-      type: "string",
+      type: 'string',
     },
     networkScanKeyFtm: {
-      type: "string",
+      type: 'string',
     },
     networkScanKeyBsc: {
-      type: "string",
+      type: 'string',
+    },
+    networkScanKeyBase: {
+      type: 'string',
     },
     privateKey: {
-      type: "string",
-      default: "85bb5fa78d5c4ed1fde856e9d0d1fe19973d7a79ce9ed6c0358ee06a4550504e" // random account
+      type: 'string',
+      default: '85bb5fa78d5c4ed1fde856e9d0d1fe19973d7a79ce9ed6c0358ee06a4550504e', // random account
     },
     ethForkBlock: {
-      type: "number",
-      default: 0
+      type: 'number',
+      default: 0,
     },
     maticForkBlock: {
-      type: "number",
-      default: 0
+      type: 'number',
+      default: 0,
     },
     ftmForkBlock: {
-      type: "number",
-      default: 0
+      type: 'number',
+      default: 0,
     },
     bscForkBlock: {
-      type: "number",
-      default: 0
+      type: 'number',
+      default: 0,
+    },
+    baseForkBlock: {
+      type: 'number',
+      default: 0,
     },
     loggingEnabled: {
-      type: "boolean",
-      default: false
+      type: 'boolean',
+      default: false,
     },
   }).argv;
 
-task("deploy", "Deploy contract", async function (args, hre, runSuper) {
+task('deploy', 'Deploy contract', async function(args, hre, runSuper) {
   const [signer] = await hre.ethers.getSigners();
   // tslint:disable-next-line:ban-ts-ignore
   // @ts-ignore
-  await deployContract(hre, signer, args.name)
-}).addPositionalParam("name", "Name of the smart contract to deploy");
+  await deployContract(hre, signer, args.name);
+}).addPositionalParam('name', 'Name of the smart contract to deploy');
 
 export default {
-  defaultNetwork: "hardhat",
+  defaultNetwork: 'hardhat',
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
@@ -116,21 +127,29 @@ export default {
           argv.hardhatChainId === 1 ? argv.ethRpcUrl :
             argv.hardhatChainId === 137 ? argv.maticRpcUrl :
               argv.hardhatChainId === 250 ? argv.ftmRpcUrl :
-              argv.hardhatChainId === 56 ? argv.bscRpcUrl :
-                undefined,
+                argv.hardhatChainId === 56 ? argv.bscRpcUrl :
+                  argv.hardhatChainId === 8453 ? argv.baseRpcUrl :
+                    undefined,
         blockNumber:
           argv.hardhatChainId === 1 ? argv.ethForkBlock !== 0 ? argv.ethForkBlock : undefined :
             argv.hardhatChainId === 137 ? argv.maticForkBlock !== 0 ? argv.maticForkBlock : undefined :
               argv.hardhatChainId === 250 ? argv.ftmForkBlock !== 0 ? argv.ftmForkBlock : undefined :
-              argv.hardhatChainId === 56 ? argv.bscForkBlock !== 0 ? argv.bscForkBlock : undefined :
-                undefined
+                argv.hardhatChainId === 56 ? argv.bscForkBlock !== 0 ? argv.bscForkBlock : undefined :
+                  argv.hardhatChainId === 8453 ? argv.baseForkBlock !== 0 ? argv.baseForkBlock : undefined :
+                    undefined,
       } : undefined,
       accounts: {
-        mnemonic: "test test test test test test test test test test test junk",
-        path: "m/44'/60'/0'/0",
-        accountsBalance: "100000000000000000000000000000"
+        mnemonic: 'test test test test test test test test test test test junk',
+        path: 'm/44\'/60\'/0\'/0',
+        accountsBalance: '100000000000000000000000000000',
       },
       loggingEnabled: argv.loggingEnabled,
+    },
+    base: {
+      url: argv.baseRpcUrl || '',
+      chainId: 8453,
+      // gas: 50_000_000_000,
+      accounts: [argv.privateKey],
     },
     ftm: {
       url: argv.ftmRpcUrl || '',
@@ -156,18 +175,18 @@ export default {
       accounts: [argv.privateKey],
     },
     mumbai: {
-      url: "https://rpc-mumbai.maticvigil.com",
+      url: 'https://rpc-mumbai.maticvigil.com',
       chainId: 80001,
       accounts: [argv.privateKey],
     },
     ropsten: {
-      url: "https://ropsten.infura.io/v3/" + argv.infuraKey,
+      url: 'https://ropsten.infura.io/v3/' + argv.infuraKey,
       chainId: 3,
       gas: 8_000_000,
       accounts: [argv.privateKey],
     },
     rinkeby: {
-      url: "https://rinkeby.infura.io/v3/" + argv.infuraKey,
+      url: 'https://rinkeby.infura.io/v3/' + argv.infuraKey,
       chainId: 4,
       gas: 8_000_000,
       gasPrice: 1_100_000_000,
@@ -208,12 +227,12 @@ export default {
       accounts: [argv.privateKey],
     },
     custom: {
-      url: "http://localhost:8545",
+      url: 'http://localhost:8545',
       chainId: 778877,
       accounts: [argv.privateKey],
     },
     baobab: {
-      url: "https://api.baobab.klaytn.net:8651",
+      url: 'https://api.baobab.klaytn.net:8651',
       chainId: 1001,
       accounts: [argv.privateKey],
     },
@@ -221,10 +240,10 @@ export default {
       // https://staging-fast-active-bellatrix.explorer.staging-v3.skalenodes.com/
       // https://staging-v3.skalenodes.com/fs/staging-fast-active-bellatrix
       // https://staging-v3.skalenodes.com/#/chains/staging-fast-active-bellatrix
-      url: "https://staging-v3.skalenodes.com/v1/staging-fast-active-bellatrix",
+      url: 'https://staging-v3.skalenodes.com/v1/staging-fast-active-bellatrix',
       chainId: 1351057110,
       accounts: [argv.privateKey],
-    }
+    },
   },
   etherscan: {
     //  https://hardhat.org/plugins/nomiclabs-hardhat-etherscan.html#multiple-api-keys-and-alternative-block-explorers
@@ -235,45 +254,54 @@ export default {
       opera: argv.networkScanKeyFtm || argv.networkScanKey,
       bsc: argv.networkScanKeyBsc || argv.networkScanKey,
       skale_test: 'any',
+      base: argv.networkScanKeyBase,
     },
     customChains: [
       {
-        network: "skale_test",
+        network: 'skale_test',
         chainId: 1351057110,
         urls: {
-          apiURL: "https://staging-fast-active-bellatrix.explorer.staging-v3.skalenodes.com/api",
-          browserURL: "https://staging-fast-active-bellatrix.explorer.staging-v3.skalenodes.com"
-        }
-      }
-    ]
+          apiURL: 'https://staging-fast-active-bellatrix.explorer.staging-v3.skalenodes.com/api',
+          browserURL: 'https://staging-fast-active-bellatrix.explorer.staging-v3.skalenodes.com',
+        },
+      },
+      {
+        network: 'base',
+        chainId: 8453,
+        urls: {
+          apiURL: 'https://api.basescan.org/api',
+          browserURL: 'https://basescan.org',
+        },
+      },
+    ],
   },
   solidity: {
     compilers: [
       {
-        version: "0.8.4",
+        version: '0.8.19',
         settings: {
           optimizer: {
             enabled: true,
             runs: 150,
-          }
-        }
+          },
+        },
       },
-    ]
+    ],
   },
   paths: {
-    sources: "./contracts",
-    tests: "./test",
-    cache: "./cache",
-    artifacts: "./artifacts"
+    sources: './contracts',
+    tests: './test',
+    cache: './cache',
+    artifacts: './artifacts',
   },
   mocha: {
-    timeout: 9999999999
+    timeout: 9999999999,
   },
   docgen: {
     path: './docs',
     clear: true,
     runOnCompile: false,
-    except: ['contracts/third_party', 'contracts/test']
+    except: ['contracts/third_party', 'contracts/test'],
   },
   contractSizer: {
     alphaSort: false,
@@ -283,15 +311,15 @@ export default {
   gasReporter: {
     enabled: false,
     currency: 'USD',
-    gasPrice: 21
+    gasPrice: 21,
   },
   typechain: {
-    outDir: "typechain",
+    outDir: 'typechain',
   },
   abiExporter: {
     path: './abi',
     runOnCompile: false,
     spacing: 2,
     pretty: false,
-  }
+  },
 };

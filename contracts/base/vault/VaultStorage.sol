@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "../../openzeppelin/Initializable.sol";
 import "../interfaces/ISmartVault.sol";
@@ -114,19 +114,9 @@ abstract contract VaultStorage is Initializable, ISmartVault {
     return getBoolean("ppfsDecreaseAllowed");
   }
 
-  function _setLockPeriod(uint256 _value) internal {
-    emit UpdatedUint256Slot("lockPeriod", lockPeriod(), _value);
-    setUint256("lockPeriod", _value);
-  }
-
   /// @notice Deposit lock period
   function lockPeriod() public view override returns (uint256) {
     return getUint256("lockPeriod");
-  }
-
-  function _setLockPenalty(uint256 _value) internal {
-    emit UpdatedUint256Slot("lockPenalty", lockPenalty(), _value);
-    setUint256("lockPenalty", _value);
   }
 
   /// @notice Base penalty if funds locked

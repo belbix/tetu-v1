@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "./ControllableV2.sol";
 import "../interfaces/IBookkeeper.sol";
@@ -25,9 +25,9 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
 
   /// @notice Version of the contract
   /// @dev Should be incremented when contract is changed
-  string public constant VERSION = "1.2.1";
+  string public constant VERSION = "2.0.0";
 
-  // DO NOT CHANGE NAMES OR ORDERING!
+  // DO NOT CHANGE ORDERING!
   /// @dev Add when Controller register vault
   address[] public override _vaults;
   /// @dev Add when Controller register strategy
@@ -35,26 +35,6 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
   /// @inheritdoc IBookkeeper
   mapping(address => uint256) public override targetTokenEarned;
   mapping(address => HardWork) private _lastHardWork;
-  /// @inheritdoc IBookkeeper
-  mapping(address => mapping(address => uint256)) public override vaultUsersBalances;
-  /// @inheritdoc IBookkeeper
-  mapping(address => mapping(address => mapping(address => uint256))) public override userEarned;
-  /// @inheritdoc IBookkeeper
-  mapping(address => uint256) public override vaultUsersQuantity;
-  /// @dev Hold last price per full share change for a given user
-  mapping(address => PpfsChange) private _lastPpfsChange;
-  /// @dev Stored any FundKeeper earnings by tokens
-  mapping(address => uint256) public override fundKeeperEarned;
-  /// @dev Hold reward notified amounts for vaults
-  mapping(address => mapping(address => uint256[])) public override vaultRewards;
-  /// @dev Length of vault rewards arrays
-  mapping(address => mapping(address => uint256)) public override vaultRewardsLength;
-  /// @dev Strategy earned values stored per each reward notification
-  mapping(address => uint256[]) public override strategyEarnedSnapshots;
-  /// @dev Timestamp when snapshot created. Has the same length as strategy snapshots
-  mapping(address => uint256[]) public override strategyEarnedSnapshotsTime;
-  /// @dev Snapshot lengths
-  mapping(address => uint256) public override strategyEarnedSnapshotsLength;
 
   /// @notice Vault added
   event RegisterVault(address value);
@@ -66,16 +46,6 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
   event RemoveStrategy(address value);
   /// @notice Strategy earned this TETU amount during doHardWork call
   event RegisterStrategyEarned(address indexed strategy, uint256 amount);
-  /// @notice FundKeeper earned this USDC amount during doHardWork call
-  event RegisterFundKeeperEarned(address indexed token, uint256 amount);
-  /// @notice User deposit/withdraw action
-  event RegisterUserAction(address indexed user, uint256 amount, bool deposit);
-  /// @notice User claim reward
-  event RegisterUserEarned(address indexed user, address vault, address token, uint256 amount);
-  /// @notice Vault's PricePer Full Share changed
-  event RegisterPpfsChange(address indexed vault, uint256 oldValue, uint256 newValue);
-  /// @notice Reward distribution registered
-  event RewardDistribution(address indexed vault, address token, uint256 amount, uint256 time);
 
   /// @notice Initialize contract after setup it as proxy implementation
   /// @dev Use it only once after first logic setup
@@ -103,13 +73,6 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
     _;
   }
 
-  /// @dev Only FeeRewardForwarder contract allowed
-  modifier onlyFeeRewardForwarderOrStrategy() {
-    require(IController(_controller()).feeRewardForwarder() == msg.sender
-      || IController(_controller()).strategies(msg.sender), "B: Only exist forwarder or strategy");
-    _;
-  }
-
   /// @dev Only registered vault allowed
   modifier onlyVault() {
     require(IController(_controller()).vaults(msg.sender), "B: Only exist vault");
@@ -119,7 +82,7 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
   /// @notice Add Vault if it doesn't exist. Only Controller sender allowed
   /// @param _vault Vault address
   function addVault(address _vault) public override onlyController {
-    require(isVaultExist(_vault), "B: Vault is not registered in controller");
+    require(_isVaultExist(_vault), "B: Vault is not registered in controller");
     _vaults.push(_vault);
     emit RegisterVault(_vault);
   }
@@ -127,7 +90,7 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
   /// @notice Add Strategy if it doesn't exist. Only Controller sender allowed
   /// @param _strategy Strategy address
   function addStrategy(address _strategy) public override onlyController {
-    require(isStrategyExist(_strategy), "B: Strategy is not registered in controller");
+    require(_isStrategyExist(_strategy), "B: Strategy is not registered in controller");
     _strategies.push(_strategy);
     emit RegisterStrategy(_strategy);
   }
@@ -148,141 +111,6 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
       _targetTokenAmount
     );
     emit RegisterStrategyEarned(msg.sender, _targetTokenAmount);
-  }
-
-  /// @notice Only FeeRewardForwarder action. Save Fund Token earned value for given token
-  /// @param _fundTokenAmount Earned amount
-  function registerFundKeeperEarned(address _token, uint256 _fundTokenAmount) external override onlyFeeRewardForwarderOrStrategy {
-    if (_fundTokenAmount != 0) {
-      fundKeeperEarned[_token] = fundKeeperEarned[_token] + _fundTokenAmount;
-      emit RegisterFundKeeperEarned(_token, _fundTokenAmount);
-    }
-  }
-
-  /// @notice DEPRECATED FeeRewardForwarder action.
-  ///         Register Price Per Full Share change for given vault
-  /// @param vault Vault address
-  /// @param value Price Per Full Share change
-  function registerPpfsChange(address vault, uint256 value)
-  external override onlyFeeRewardForwarderOrStrategy {
-    // noop
-  }
-
-  /// @notice Vault action.
-  ///         Register reward distribution
-  /// @param vault Vault address
-  /// @param rewardToken Reward token address
-  /// @param amount Reward amount
-  function registerRewardDistribution(address vault, address rewardToken, uint256 amount)
-  external override onlyVault {
-    vaultRewards[vault][rewardToken].push(amount);
-    vaultRewardsLength[vault][rewardToken] = vaultRewards[vault][rewardToken].length;
-
-    address strategy = ISmartVault(vault).strategy();
-    if (IStrategy(strategy).platform() == IStrategy.Platform.STRATEGY_SPLITTER) {
-      address[] memory subStrategies = IStrategySplitter(strategy).allStrategies();
-      for (uint i; i < subStrategies.length; i++) {
-        address subStrategy = subStrategies[i];
-
-        uint currentEarned = targetTokenEarned[subStrategy];
-        uint currentLength = strategyEarnedSnapshotsLength[subStrategy];
-        if (currentLength > 0) {
-          uint prevEarned = strategyEarnedSnapshots[subStrategy][currentLength - 1];
-          if (currentEarned == prevEarned) {
-            // don't write zero values
-            continue;
-          }
-        }
-
-        strategyEarnedSnapshots[subStrategy].push(currentEarned);
-        strategyEarnedSnapshotsTime[subStrategy].push(block.timestamp);
-        strategyEarnedSnapshotsLength[subStrategy] = strategyEarnedSnapshots[subStrategy].length;
-      }
-    } else {
-      uint currentEarned = targetTokenEarned[strategy];
-      uint currentLength = strategyEarnedSnapshotsLength[strategy];
-      if (currentLength > 0) {
-        uint prevEarned = strategyEarnedSnapshots[strategy][currentLength - 1];
-        // don't write zero values
-        if (currentEarned != prevEarned) {
-          strategyEarnedSnapshots[strategy].push(currentEarned);
-          strategyEarnedSnapshotsTime[strategy].push(block.timestamp);
-          strategyEarnedSnapshotsLength[strategy] = strategyEarnedSnapshots[strategy].length;
-        }
-      }
-    }
-    emit RewardDistribution(vault, rewardToken, amount, block.timestamp);
-  }
-
-  /// @notice Vault action. Register user's deposit/withdraw
-  /// @dev Should register any mint/burn of the share token
-  /// @param _user User address
-  /// @param _amount Share amount for deposit/withdraw
-  /// @param _deposit true = deposit, false = withdraw
-  function registerUserAction(address _user, uint256 _amount, bool _deposit)
-  external override onlyVault {
-    if (vaultUsersBalances[msg.sender][_user] == 0) {
-      vaultUsersQuantity[msg.sender] = vaultUsersQuantity[msg.sender] + 1;
-    }
-    if (_deposit) {
-      vaultUsersBalances[msg.sender][_user] = vaultUsersBalances[msg.sender][_user] + _amount;
-    } else {
-      // avoid overflow if we missed something
-      // in this unreal case better do nothing
-      if (vaultUsersBalances[msg.sender][_user] >= _amount) {
-        vaultUsersBalances[msg.sender][_user] = vaultUsersBalances[msg.sender][_user] - _amount;
-      }
-    }
-    if (vaultUsersBalances[msg.sender][_user] == 0) {
-      vaultUsersQuantity[msg.sender] = vaultUsersQuantity[msg.sender] - 1;
-    }
-    emit RegisterUserAction(_user, _amount, _deposit);
-  }
-
-  /// @notice Vault action. Register any share token transfer.
-  ///         Burn/mint ignored - should be handled in registerUserAction()
-  /// @param from Sender address
-  /// @param to Recipient address
-  /// @param amount Transaction amount
-  function registerVaultTransfer(address from, address to, uint256 amount) external override onlyVault {
-    // in this unreal cases better to do nothing
-    if (vaultUsersBalances[msg.sender][from] < amount || amount == 0) {
-      return;
-    }
-
-    // don't count mint and burn - it should be covered in registerUserAction
-    // also transfer to ourself is ignoring
-    if (from == address(0) || to == address(0) || from == to) {
-      return;
-    }
-
-    // decrease sender balance
-    vaultUsersBalances[msg.sender][from] = vaultUsersBalances[msg.sender][from] - amount;
-
-    // if recipient didn't have balance - increase user quantity
-    if (vaultUsersBalances[msg.sender][to] == 0) {
-      vaultUsersQuantity[msg.sender] = vaultUsersQuantity[msg.sender] + 1;
-    }
-    // increase recipient balance
-    vaultUsersBalances[msg.sender][to] = vaultUsersBalances[msg.sender][to] + amount;
-
-    // if sender sent all amount decrease user quantity
-    if (vaultUsersBalances[msg.sender][from] == 0) {
-      vaultUsersQuantity[msg.sender] = vaultUsersQuantity[msg.sender] - 1;
-    }
-  }
-
-  /// @notice Only Vault can call it. Register user's claimed amount of given token
-  /// @param _user User address
-  /// @param _vault Vault address
-  /// @param _rt Reward Token address
-  /// @param _amount Claimed amount
-  function registerUserEarned(address _user, address _vault, address _rt, uint256 _amount)
-  external override onlyVault {
-    if (_amount != 0) {
-      userEarned[_user][_vault][_rt] = userEarned[_user][_vault][_rt] + _amount;
-      emit RegisterUserEarned(_user, _vault, _rt, _amount);
-    }
   }
 
   /// @notice Return vaults array
@@ -318,24 +146,17 @@ contract Bookkeeper is IBookkeeper, Initializable, ControllableV2 {
     return _lastHardWork[strategy];
   }
 
-  /// @notice Return info about last PricePerFullShare change for given vault
-  /// @param vault Vault address
-  /// @return PpfsChange struct with result
-  function lastPpfsChange(address vault) external view override returns (PpfsChange memory) {
-    return _lastPpfsChange[vault];
-  }
-
   /// @notice Return true for registered Vault
   /// @param _value Vault address
   /// @return true if Vault registered
-  function isVaultExist(address _value) internal view returns (bool) {
+  function _isVaultExist(address _value) internal view returns (bool) {
     return IController(_controller()).isValidVault(_value);
   }
 
   /// @notice Return true for registered Strategy
   /// @param _value Strategy address
   /// @return true if Strategy registered
-  function isStrategyExist(address _value) internal view returns (bool) {
+  function _isStrategyExist(address _value) internal view returns (bool) {
     return IController(_controller()).isValidStrategy(_value);
   }
 

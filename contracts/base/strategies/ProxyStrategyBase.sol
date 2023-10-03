@@ -9,7 +9,7 @@
 * as all warranties, including any fitness for a particular purpose with respect
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 
 import "../../openzeppelin/Math.sol";
@@ -20,8 +20,6 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IFeeRewardForwarder.sol";
 import "../interfaces/IBookkeeper.sol";
 import "../interfaces/ISmartVault.sol";
-import "../../third_party/uniswap/IUniswapV2Pair.sol";
-import "../../third_party/uniswap/IUniswapV2Router02.sol";
 
 /// @title Abstract contract for base strategy functionality
 ///        Implementation must support proxy
@@ -267,111 +265,6 @@ abstract contract ProxyStrategyBase is IStrategy, ControllableV2, StrategyStorag
     if (bal != 0) {
       emergencyWithdrawFromPool();
     }
-  }
-
-  /// @dev Default implementation of liquidation process
-  ///      Send all profit to FeeRewardForwarder
-  function liquidateRewardDefault() internal {
-    _liquidateReward(true);
-  }
-
-  function liquidateRewardSilently() internal {
-    _liquidateReward(false);
-  }
-
-  function _liquidateReward(bool revertOnErrors) internal {
-    address forwarder = IController(_controller()).feeRewardForwarder();
-    uint targetTokenEarnedTotal = 0;
-    for (uint i = 0; i < _rewardTokens.length; i++) {
-      address rt = _rewardTokens[i];
-      uint amount = IERC20(rt).balanceOf(address(this));
-      if (amount != 0) {
-        IERC20(rt).safeApprove(forwarder, 0);
-        IERC20(rt).safeApprove(forwarder, amount);
-        // it will sell reward token to Target Token and distribute it to SmartVault and PS
-        uint targetTokenEarned = 0;
-        if (revertOnErrors) {
-          targetTokenEarned = IFeeRewardForwarder(forwarder).distribute(amount, rt, _vault());
-        } else {
-          //slither-disable-next-line unused-return,variable-scope,uninitialized-local
-          try IFeeRewardForwarder(forwarder).distribute(amount, rt, _vault()) returns (uint r) {
-            targetTokenEarned = r;
-          } catch {}
-        }
-        targetTokenEarnedTotal += targetTokenEarned;
-      }
-    }
-    if (targetTokenEarnedTotal > 0) {
-      IBookkeeper(IController(_controller()).bookkeeper()).registerStrategyEarned(targetTokenEarnedTotal);
-    }
-  }
-
-  /// @dev Liquidate rewards and buy underlying asset
-  function autocompound() internal {
-    address forwarder = IController(_controller()).feeRewardForwarder();
-    for (uint i = 0; i < _rewardTokens.length; i++) {
-      address rt = _rewardTokens[i];
-      uint amount = IERC20(rt).balanceOf(address(this));
-      if (amount != 0) {
-        uint toCompound = amount * (_BUY_BACK_DENOMINATOR - _buyBackRatio()) / _BUY_BACK_DENOMINATOR;
-        IERC20(rt).safeApprove(forwarder, 0);
-        IERC20(rt).safeApprove(forwarder, toCompound);
-        IFeeRewardForwarder(forwarder).liquidate(rt, _underlying(), toCompound);
-      }
-    }
-  }
-
-  /// @dev Default implementation of auto-compounding for swap pairs
-  ///      Liquidate rewards, buy assets and add to liquidity pool
-  function autocompoundLP(address _router) internal {
-    address forwarder = IController(_controller()).feeRewardForwarder();
-    for (uint i = 0; i < _rewardTokens.length; i++) {
-      address rt = _rewardTokens[i];
-      uint amount = IERC20(rt).balanceOf(address(this));
-      if (amount != 0) {
-        uint toCompound = amount * (_BUY_BACK_DENOMINATOR - _buyBackRatio()) / _BUY_BACK_DENOMINATOR;
-        IERC20(rt).safeApprove(forwarder, 0);
-        IERC20(rt).safeApprove(forwarder, toCompound);
-
-        IUniswapV2Pair pair = IUniswapV2Pair(_underlying());
-        if (rt != pair.token0()) {
-          uint token0Amount = IFeeRewardForwarder(forwarder).liquidate(rt, pair.token0(), toCompound / 2);
-          require(token0Amount != 0, "SB: Token0 zero amount");
-        }
-        if (rt != pair.token1()) {
-          uint token1Amount = IFeeRewardForwarder(forwarder).liquidate(rt, pair.token1(), toCompound / 2);
-          require(token1Amount != 0, "SB: Token1 zero amount");
-        }
-        addLiquidity(_underlying(), _router);
-      }
-    }
-  }
-
-  /// @dev Add all available tokens to given pair
-  function addLiquidity(address _pair, address _router) internal {
-    IUniswapV2Router02 router = IUniswapV2Router02(_router);
-    IUniswapV2Pair pair = IUniswapV2Pair(_pair);
-    address _token0 = pair.token0();
-    address _token1 = pair.token1();
-
-    uint amount0 = IERC20(_token0).balanceOf(address(this));
-    uint amount1 = IERC20(_token1).balanceOf(address(this));
-
-    IERC20(_token0).safeApprove(_router, 0);
-    IERC20(_token0).safeApprove(_router, amount0);
-    IERC20(_token1).safeApprove(_router, 0);
-    IERC20(_token1).safeApprove(_router, amount1);
-    //slither-disable-next-line unused-return
-    router.addLiquidity(
-      _token0,
-      _token1,
-      amount0,
-      amount1,
-      1,
-      1,
-      address(this),
-      block.timestamp
-    );
   }
 
   //******************** VIRTUAL *********************

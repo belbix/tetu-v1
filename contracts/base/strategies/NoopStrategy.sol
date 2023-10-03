@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "./StrategyBase.sol";
 import "../../third_party/IDelegation.sol";
@@ -67,7 +67,6 @@ contract NoopStrategy is StrategyBase {
     // call empty functions for getting 100% test coverage
     withdrawAndClaimFromPool(0);
     emergencyWithdrawFromPool();
-    liquidateReward();
   }
 
   /// @dev Stub function for Strategy Base implementation
@@ -83,12 +82,6 @@ contract NoopStrategy is StrategyBase {
   /// @dev Stub function for Strategy Base implementation
   function emergencyWithdrawFromPool() internal override {
     //noop
-  }
-
-  /// @dev Stub function for Strategy Base implementation
-  //slither-disable-next-line dead-code
-  function liquidateReward() internal override {
-    // noop
   }
 
   /// @dev Platform name for statistical purposes

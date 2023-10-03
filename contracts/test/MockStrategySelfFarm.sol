@@ -9,7 +9,7 @@
 * as all warranties, including any fitness for a particular purpose with respect
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "../base/strategies/NoopStrategy.sol";
 import "../base/interfaces/ISmartVault.sol";
@@ -50,7 +50,6 @@ contract MockStrategySelfFarm is StrategyBase {
 
   function doHardWork() external onlyNotPausedInvesting override hardWorkers {
     exitRewardPool();
-    liquidateReward();
     investAllUnderlying();
   }
 
@@ -66,10 +65,6 @@ contract MockStrategySelfFarm is StrategyBase {
 
   function emergencyWithdrawFromPool() internal override {
     ISmartVault(pool).withdraw(rewardPoolBalance());
-  }
-
-  function liquidateReward() internal override {
-    liquidateRewardDefault();
   }
 
   function platform() external override view returns (IStrategy.Platform) {

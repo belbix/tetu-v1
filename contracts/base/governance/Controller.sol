@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "../../openzeppelin/SafeERC20.sol";
 import "../../openzeppelin/IERC20.sol";
@@ -627,8 +627,9 @@ contract Controller is Initializable, ControllableV2, ControllerStorage {
   /// @param _adr Address for check
   /// @return true if the address allowed
   function isAllowedUser(address _adr) external view override returns (bool) {
-    return isNotSmartContract(_adr)
-    || whiteList[_adr]
+    return
+//      isNotSmartContract(_adr) || strict whitelisting
+      whiteList[_adr]
     || _governance() == _adr
     || hardWorkers[_adr]
     || rewardDistribution[_adr]

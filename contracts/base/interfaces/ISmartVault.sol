@@ -10,13 +10,11 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 interface ISmartVault {
 
   function DEPOSIT_FEE_DENOMINATOR() external view returns (uint256);
-
-  function LOCK_PENALTY_DENOMINATOR() external view returns (uint256);
 
   function TO_INVEST_DENOMINATOR() external view returns (uint256);
 
@@ -106,10 +104,6 @@ interface ISmartVault {
   function notifyTargetRewardAmount(address _rewardToken, uint256 amount)
   external;
 
-  function overrideName(string memory value) external;
-
-  function overrideSymbol(string memory value) external;
-
   function periodFinishForToken(address) external view returns (uint256);
 
   function ppfsDecreaseAllowed() external view returns (bool);
@@ -135,11 +129,7 @@ interface ISmartVault {
 
   function rewardsForToken(address, address) external view returns (uint256);
 
-  function setLockPenalty(uint256 _value) external;
-
   function setRewardsRedirect(address owner, address receiver) external;
-
-  function setLockPeriod(uint256 _value) external;
 
   function setStrategy(address newStrategy) external;
 
@@ -169,8 +159,6 @@ interface ISmartVault {
   function userLastDepositTs(address) external view returns (uint256);
 
   function userLastWithdrawTs(address) external view returns (uint256);
-
-  function userLockTs(address) external view returns (uint256);
 
   function userRewardPerTokenPaidForToken(address, address)
   external

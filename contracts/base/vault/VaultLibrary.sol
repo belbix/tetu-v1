@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "../../openzeppelin/IERC20.sol";
 import "../../openzeppelin/SafeERC20.sol";
@@ -251,10 +251,6 @@ library VaultLibrary {
 
       rewardsForToken[rt][owner] = 0;
       IERC20(rt).safeTransfer(receiver, paidReward);
-      // only statistic, should not affect reward claim process
-      try IBookkeeper(IController(controller).bookkeeper())
-      .registerUserEarned(owner, address(this), rt, paidReward) {
-      } catch {}
     }
     return (renotifiedAmount, paidReward);
   }

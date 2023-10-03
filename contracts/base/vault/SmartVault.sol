@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 import "../../openzeppelin/Math.sol";
 import "../../openzeppelin/SafeERC20.sol";
@@ -34,13 +34,9 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   // ************* CONSTANTS ********************
   /// @notice Version of the contract
   /// @dev Should be incremented when contract changed
-  string public constant override VERSION = "1.10.6";
-  /// @dev Denominator for penalty numerator
-  uint256 public constant override LOCK_PENALTY_DENOMINATOR = 1000;
+  string public constant override VERSION = "2.0.0";
   uint256 public constant override TO_INVEST_DENOMINATOR = 1000;
   uint256 public constant override DEPOSIT_FEE_DENOMINATOR = 10000;
-  uint256 private constant NAME_OVERRIDE_ID = 0;
-  uint256 private constant SYMBOL_OVERRIDE_ID = 1;
   string private constant FORBIDDEN_MSG = "SV: Forbidden";
 
   // ********************* VARIABLES *****************
@@ -70,13 +66,9 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   mapping(address => uint256) public override userLastWithdrawTs;
   /// @dev In normal circumstances hold last claim timestamp for users
   mapping(address => uint256) public override userBoostTs;
-  /// @dev In normal circumstances hold last withdraw timestamp for users
-  mapping(address => uint256) public override userLockTs;
   /// @dev Only for statistical purposes, no guarantee to be accurate
   ///      Last timestamp value when user deposit. Doesn't update on transfers
   mapping(address => uint256) public override userLastDepositTs;
-  /// @dev VaultStorage doesn't have a map for strings so we need to add it here
-  mapping(uint256 => string) private _nameOverrides;
   mapping(address => address) public rewardsRedirect;
 
   /// @notice Initialize contract after setup it as proxy implementation
@@ -158,22 +150,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   // ************ COMMON VIEWS ***********************
 
-  function name() public view override returns (string memory) {
-    string memory nameForOverride = _nameOverrides[NAME_OVERRIDE_ID];
-    if (bytes(nameForOverride).length != 0) {
-      return nameForOverride;
-    }
-    return super.name();
-  }
-
-  function symbol() public view override returns (string memory) {
-    string memory symbolForOverride = _nameOverrides[SYMBOL_OVERRIDE_ID];
-    if (bytes(symbolForOverride).length != 0) {
-      return symbolForOverride;
-    }
-    return super.symbol();
-  }
-
   /// @notice ERC20 compatible decimals value. Should be the same as underlying
   function decimals() public view override returns (uint8) {
     return ERC20Upgradeable(_underlying()).decimals();
@@ -186,42 +162,11 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   // ************ GOVERNANCE ACTIONS ******************
 
-  /// @notice Override vault name
-  function overrideName(string calldata value) external override {
-    require(_isGovernance(msg.sender));
-    _nameOverrides[NAME_OVERRIDE_ID] = value;
-  }
-
-  /// @notice Override vault name
-  function overrideSymbol(string calldata value) external override {
-    require(_isGovernance(msg.sender));
-    _nameOverrides[SYMBOL_OVERRIDE_ID] = value;
-  }
-
   /// @notice Change permission for decreasing ppfs during hard work process
   /// @param _value true - allowed, false - disallowed
   function changePpfsDecreaseAllowed(bool _value) external override {
     _onlyVaultController(msg.sender);
     _setPpfsDecreaseAllowed(_value);
-  }
-
-  /// @notice Set lock period for funds. Can be called only once
-  /// @param _value Timestamp value
-  function setLockPeriod(uint256 _value) external override {
-    require(_isController(msg.sender) || _isGovernance(msg.sender), FORBIDDEN_MSG);
-    require(_lockAllowed());
-    require(lockPeriod() == 0);
-    _setLockPeriod(_value);
-  }
-
-  /// @notice Set lock initial penalty nominator. Can be called only once
-  /// @param _value Penalty denominator, should be in range 0 - (LOCK_PENALTY_DENOMINATOR / 2)
-  function setLockPenalty(uint256 _value) external override {
-    require(_isController(msg.sender) || _isGovernance(msg.sender), FORBIDDEN_MSG);
-    require(_value <= (LOCK_PENALTY_DENOMINATOR / 2));
-    require(_lockAllowed());
-    require(lockPenalty() == 0);
-    _setLockPenalty(_value);
   }
 
   /// @dev All rewards for given owner could be claimed for receiver address.
@@ -236,13 +181,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     _onlyVaultController(msg.sender);
     require(_value <= TO_INVEST_DENOMINATOR);
     _setToInvest(_value);
-  }
-
-  /// @dev Disable lock penalty
-  function lockStatusChange(bool status) external {
-    require(_isGovernance(msg.sender), FORBIDDEN_MSG);
-    require(_lockAllowed() != status);
-    _lockStatusChange(status);
   }
 
   /// @notice Change the active state marker
@@ -444,11 +382,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
         userBoostTs[to] = block.timestamp;
       }
 
-      // start lock only for new deposits
-      if (userLockTs[to] == 0 && _lockAllowed()) {
-        userLockTs[to] = block.timestamp;
-      }
-
       // store current timestamp
       userLastDepositTs[to] = block.timestamp;
     } else if (to == address(0)) {
@@ -478,11 +411,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
       userLastWithdrawTs[from] = block.timestamp;
     }
 
-    // register ownership changing
-    // only statistic, no funds affected
-    try IBookkeeper(IController(_controller()).bookkeeper())
-    .registerVaultTransfer(from, to, amount) {
-    } catch {}
     super._beforeTokenTransfer(from, to, amount);
   }
 
@@ -571,16 +499,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     // store totalSupply before shares burn
     uint256 _totalSupply = totalSupply();
 
-    // this logic not eligible for normal vaults
-    if (_lockAllowed()) {
-      numberOfShares = _processLockedAmount(numberOfShares);
-    }
-
-    // only statistic, no funds affected
-    try IBookkeeper(IController(_controller()).bookkeeper())
-    .registerUserAction(msg.sender, numberOfShares, false) {
-    } catch {}
-
     uint256 underlyingAmountToWithdraw = VaultLibrary.processWithdrawFromStrategy(
       numberOfShares,
       _underlying(),
@@ -597,28 +515,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     _setReentrantLock(false);
     // update the withdrawal amount for the holder
     emit Withdraw(msg.sender, underlyingAmountToWithdraw);
-  }
-
-  /// @dev Locking logic will add a part of locked shares as rewards for this vault
-  ///      Calculate locked amount and distribute locked shares as reward to the current vault
-  /// @return Number of shares available to withdraw
-  function _processLockedAmount(uint256 numberOfShares) internal returns (uint256){
-    (uint numberOfSharesAdjusted, uint lockedSharesToReward) = VaultLibrary.calculateLockedAmount(
-      numberOfShares,
-      userLockTs,
-      lockPeriod(),
-      lockPenalty(),
-      balanceOf(msg.sender)
-    );
-
-    if (lockedSharesToReward != 0) {
-      // move shares to current contract for using as rewards
-      _transfer(msg.sender, address(this), lockedSharesToReward);
-      // vault should have itself as reward token for recirculation process
-      _notifyRewardWithoutPeriodChange(lockedSharesToReward, address(this));
-    }
-
-    return numberOfSharesAdjusted;
   }
 
   /// @notice Mint shares and transfer underlying from user to the vault
@@ -640,10 +536,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
       IERC20(_underlying()).safeTransferFrom(sender, address(this), amount);
 
-      // only statistic, no funds affected
-      try IBookkeeper(IController(_controller()).bookkeeper())
-      .registerUserAction(beneficiary, toMint, true){
-      } catch {}
       emit Deposit(beneficiary, amount);
     }
     _setReentrantLock(false);
@@ -773,9 +665,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   function notifyTargetRewardAmount(address _rewardToken, uint256 amount) external override {
     require(IController(_controller()).isRewardDistributor(msg.sender), FORBIDDEN_MSG);
     _updateRewards(address(0));
-    // register notified amount for statistical purposes
-    IBookkeeper(IController(_controller()).bookkeeper())
-    .registerRewardDistribution(address(this), _rewardToken, amount);
 
     // overflow fix according to https://sips.synthetix.io/sips/sip-77
     require(amount < type(uint256).max / 1e18, "SV: Amount overflow");

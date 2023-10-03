@@ -10,7 +10,7 @@
 * to Tetu and/or the underlying software and the use thereof are disclaimed.
 */
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
 
 /// @dev This interface contains additional functions for Controllable class
 ///      Don't extend the exist Controllable for the reason of huge coherence

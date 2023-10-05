@@ -1,14 +1,5 @@
-// SPDX-License-Identifier: ISC
-/**
-* By using this software, you understand, acknowledge and accept that Tetu
-* and/or the underlying software are provided “as is” and “as available”
-* basis and without warranties or representations of any kind either expressed
-* or implied. Any use of this open source software released under the ISC
-* Internet Systems Consortium license is done at your own risk to the fullest
-* extent permissible pursuant to applicable law any and all liability as well
-* as all warranties, including any fitness for a particular purpose with respect
-* to Tetu and/or the underlying software and the use thereof are disclaimed.
-*/
+// SPDX-License-Identifier: MIT
+
 
 pragma solidity 0.8.19;
 
@@ -87,7 +78,7 @@ contract Announcer is ControllableV2, IAnnouncer {
     require(
       _isGovernance(msg.sender)
       || _isController(msg.sender)
-    , "not control member");
+      , "not control member");
     _;
   }
 
@@ -282,7 +273,7 @@ contract Announcer is ControllableV2, IAnnouncer {
     }
   }
 
-  /// @notice Close any announce. Use in emergency case.
+  /// @notice Close any announce. Use in want to remove unused announce.
   /// @param opCode TimeLockOpCodes uint8 value
   /// @param opHash keccak256(abi.encode()) code with attributes.
   /// @param target Address for multi time lock. Set zero address if not required.

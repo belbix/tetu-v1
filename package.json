@@ -1,7 +1,7 @@
 {
-  "name": "@tetu_io/tetu-contracts",
-  "version": "1.9.2",
-  "description": "TETU solidity monorepo",
+  "name": "tetu-v1",
+  "version": "1.0.0",
+  "description": "TETU v1 simplified",
   "main": "hardhat.config.js",
   "directories": {
     "test": "test"
@@ -12,31 +12,9 @@
     "compile": "npx hardhat compile",
     "test": "npm run build && npx hardhat test",
     "coverage": "npm run build && npx cross-env NODE_OPTIONS=\"--max_old_space_size=8192\" hardhat coverage --temp artifacts --max-memory 4096",
-    "slither": "npm run build && slither .",
-    "lint": "tslint -p tsconfig.json",
-    "lint-fix": "tslint --fix -p tsconfig.json",
-    "update-block": "ts-node scripts/utils/tools/UpdateBlock.ts",
-    "publish": "npm publish --access public",
-    "announces": "hardhat run scripts/utils/collect/CheckAnnounces.ts --network matic"
+    "slither": "npm run build && slither ."
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/tetu-io/tetu-contracts.git"
-  },
-  "keywords": [
-    "solidity",
-    "ethereum",
-    "polygon",
-    "bsc",
-    "smart",
-    "contracts",
-    "tetu"
-  ],
-  "author": "TETU team <admin@tetu.io>",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://tasks.tetu.io/youtrack/issues/UISS"
-  },
+  "license": "MIT",
   "homepage": "https://tetu.io",
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",

@@ -1,26 +1,17 @@
-// SPDX-License-Identifier: ISC
-/**
-* By using this software, you understand, acknowledge and accept that Tetu
-* and/or the underlying software are provided “as is” and “as available”
-* basis and without warranties or representations of any kind either expressed
-* or implied. Any use of this open source software released under the ISC
-* Internet Systems Consortium license is done at your own risk to the fullest
-* extent permissible pursuant to applicable law any and all liability as well
-* as all warranties, including any fitness for a particular purpose with respect
-* to Tetu and/or the underlying software and the use thereof are disclaimed.
-*/
+// SPDX-License-Identifier: MIT
+
 pragma solidity 0.8.19;
 
 import "../../openzeppelin/SafeERC20.sol";
 import "../../openzeppelin/Math.sol";
 import "../interfaces/IStrategy.sol";
-import "../governance/Controllable.sol";
+import "../governance/ControllableV2.sol";
 import "../interfaces/IBookkeeper.sol";
 import "../interfaces/ISmartVault.sol";
 
 /// @title Abstract contract for base strategy functionality
 /// @author belbix
-abstract contract StrategyBase is IStrategy, Controllable {
+abstract contract StrategyBase is IStrategy, ControllableV2 {
   using SafeERC20 for IERC20;
 
   uint256 internal constant _BUY_BACK_DENOMINATOR = 100_00;
@@ -44,8 +35,8 @@ abstract contract StrategyBase is IStrategy, Controllable {
   ///      Use for functions that should have strict access.
   modifier restricted() {
     require(msg.sender == _smartVault
-    || msg.sender == address(controller())
-      || isGovernance(msg.sender),
+    || msg.sender == address(_controller())
+      || _isGovernance(msg.sender),
       "SB: Not Gov or Vault");
     _;
   }
@@ -54,9 +45,9 @@ abstract contract StrategyBase is IStrategy, Controllable {
   ///      Use for functions that should be called by HardWorkers
   modifier hardWorkers() {
     require(msg.sender == _smartVault
-    || msg.sender == address(controller())
-    || IController(controller()).isHardWorker(msg.sender)
-      || isGovernance(msg.sender),
+    || msg.sender == address(_controller())
+    || IController(_controller()).isHardWorker(msg.sender)
+      || _isGovernance(msg.sender),
       "SB: Not HW or Gov or Vault");
     _;
   }
@@ -81,7 +72,7 @@ abstract contract StrategyBase is IStrategy, Controllable {
     address[] memory __rewardTokens,
     uint256 _bbRatio
   ) {
-    Controllable.initializeControllable(_controller);
+    ControllableV2.initializeControllable(_controller);
     _underlyingToken = _underlying;
     _smartVault = _vault;
     _rewardTokens = __rewardTokens;
@@ -156,18 +147,18 @@ abstract contract StrategyBase is IStrategy, Controllable {
   ///         Governance can exit the pool properly
   ///         The function is only used for emergency to exit the pool
   ///         Pause investing
-  function emergencyExit() external override onlyControllerOrGovernance {
+  function emergencyExit() external override restricted {
     emergencyExitRewardPool();
     pausedInvesting = true;
   }
 
   /// @notice Pause investing into the underlying reward pools
-  function pauseInvesting() external override onlyControllerOrGovernance {
+  function pauseInvesting() external override restricted {
     pausedInvesting = true;
   }
 
   /// @notice Resumes the ability to invest into the underlying reward pools
-  function continueInvesting() external override onlyControllerOrGovernance {
+  function continueInvesting() external override restricted {
     pausedInvesting = false;
   }
 
@@ -176,8 +167,8 @@ abstract contract StrategyBase is IStrategy, Controllable {
   /// @param recipient Recipient address
   /// @param recipient Token address
   /// @param recipient Token amount
-  function salvage(address recipient, address token, uint256 amount)
-  external override onlyController {
+  function salvage(address recipient, address token, uint256 amount) external override {
+    require(_isController(msg.sender), '!controller');
     // To make sure that governance cannot come in and take away the coins
     require(!_unsalvageableTokens[token], "SB: Not salvageable");
     IERC20(token).safeTransfer(recipient, amount);

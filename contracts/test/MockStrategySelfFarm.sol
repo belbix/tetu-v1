@@ -18,7 +18,7 @@ import "../base/interfaces/ISmartVault.sol";
 contract MockStrategySelfFarm is StrategyBase {
   using SafeERC20 for IERC20;
 
-  IStrategy.Platform private _platform;
+  uint private _platform;
   address[] private _assets;
 
   string public constant VERSION = "1.0.0";
@@ -33,7 +33,7 @@ contract MockStrategySelfFarm is StrategyBase {
     address _pool,
     address __underlying,
     address[] memory __assets,
-    IStrategy.Platform __platform,
+    uint __platform,
     address[] memory __rewards
   ) StrategyBase(_controller, __underlying, _vault, __rewards, BUY_BACK_RATIO) {
     require(_pool != address(0), "zero address");
@@ -67,7 +67,7 @@ contract MockStrategySelfFarm is StrategyBase {
     ISmartVault(pool).withdraw(rewardPoolBalance());
   }
 
-  function platform() external override view returns (IStrategy.Platform) {
+  function platform() external override view returns (uint) {
     return _platform;
   }
 

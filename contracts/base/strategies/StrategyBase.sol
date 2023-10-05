@@ -15,7 +15,6 @@ import "../../openzeppelin/SafeERC20.sol";
 import "../../openzeppelin/Math.sol";
 import "../interfaces/IStrategy.sol";
 import "../governance/Controllable.sol";
-import "../interfaces/IFeeRewardForwarder.sol";
 import "../interfaces/IBookkeeper.sol";
 import "../interfaces/ISmartVault.sol";
 

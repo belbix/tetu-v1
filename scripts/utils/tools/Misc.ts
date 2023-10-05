@@ -38,14 +38,6 @@ export class Misc {
     log.info('>>>' + text, ((Date.now() - start) / 1000).toFixed(1), 'sec');
   }
 
-  public static async getBlockTsFromChain(): Promise<number> {
-    const signer = (await ethers.getSigners())[0];
-    const tools = await DeployerUtils.getToolsAddresses();
-    const ctr = await DeployerUtils.connectInterface(signer, 'Multicall', tools.multicall) as Multicall;
-    const ts = await ctr.getCurrentBlockTimestamp();
-    return ts.toNumber();
-  }
-
   public static async getChainConfig() {
     const net = await ethers.provider.getNetwork();
     switch (net.chainId) {

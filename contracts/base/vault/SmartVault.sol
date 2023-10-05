@@ -16,19 +16,18 @@ import "../../openzeppelin/Math.sol";
 import "../../openzeppelin/SafeERC20.sol";
 import "../../openzeppelin/IERC20.sol";
 import "../../openzeppelin/ERC20Upgradeable.sol";
-import "./VaultStorage.sol";
 import "./VaultLibrary.sol";
 import "../governance/ControllableV2.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IController.sol";
 import "../interfaces/IBookkeeper.sol";
-import "../interfaces/IVaultController.sol";
+import "../interfaces/ISmartVault.sol";
 
 /// @title Smart Vault is a combination of implementations drawn from Synthetix pool
 ///        for their innovative reward vesting and Yearn vault for their share price model
 /// @dev Use with TetuProxy
 /// @author belbix
-contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, ControllableV2 {
+contract SmartVault is Initializable, ERC20Upgradeable, ISmartVault, ControllableV2 {
   using SafeERC20 for IERC20;
 
   // ************* CONSTANTS ********************
@@ -40,9 +39,22 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   string private constant FORBIDDEN_MSG = "SV: Forbidden";
 
   // ********************* VARIABLES *****************
-  //in upgradable contracts you can skip storage ONLY for mapping and dynamically-sized array types
-  //https://docs.soliditylang.org/en/v0.4.21/miscellaneous.html#layout-of-state-variables-in-storage
-  //use VaultStorage for primitive variables
+
+  // ****** STORAGE VARIABLES ******** //
+
+  /// @notice Current strategy that vault use for farming
+  address public override strategy;
+  /// @notice Vault underlying
+  address public override underlying;
+  /// @notice Rewards vesting period
+  uint public override duration;
+  /// @notice Vault status
+  bool public override active;
+  bool public override ppfsDecreaseAllowed;
+  uint public override toInvest;
+  bool public override doHardWorkOnDeposit;
+  bool public override alwaysInvest;
+  bool internal _reentrantLock;
 
   // ****** REWARD MECHANIC VARIABLES ******** //
   /// @dev A list of reward tokens that able to be distributed to this contract
@@ -61,14 +73,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   mapping(address => mapping(address => uint256)) public override rewardsForToken;
 
   // ******** OTHER VARIABLES **************** //
-  /// @dev Only for statistical purposes, no guarantee to be accurate
-  ///      Last timestamp value when user withdraw. Resets on transfer
-  mapping(address => uint256) public override userLastWithdrawTs;
-  /// @dev In normal circumstances hold last claim timestamp for users
-  mapping(address => uint256) public override userBoostTs;
-  /// @dev Only for statistical purposes, no guarantee to be accurate
-  ///      Last timestamp value when user deposit. Doesn't update on transfers
-  mapping(address => uint256) public override userLastDepositTs;
   mapping(address => address) public rewardsRedirect;
 
   /// @notice Initialize contract after setup it as proxy implementation
@@ -78,7 +82,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @param _controller Controller address
   /// @param __underlying Vault underlying address
   /// @param _duration Rewards duration
-  /// @param _lockAllowed Set true with lock mechanic requires
   /// @param _rewardToken Reward token address. Set zero address if not requires
   function initializeSmartVault(
     string memory _name,
@@ -86,30 +89,24 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     address _controller,
     address __underlying,
     uint256 _duration,
-    bool _lockAllowed,
-    address _rewardToken,
-    uint _depositFee
+    address _rewardToken
   ) external override initializer {
     __ERC20_init(_name, _symbol);
-
     ControllableV2.initializeControllable(_controller);
-    VaultStorage.initializeVaultStorage(
-      __underlying,
-      _duration,
-      _lockAllowed
-    );
+
+    underlying = __underlying;
+    duration = _duration;
+    active = true;
+
     // initialize reward token for easily deploy new vaults from deployer address
     if (_rewardToken != address(0)) {
-      require(_rewardToken != _underlying());
+      require(_rewardToken != __underlying);
       _rewardTokens.push(_rewardToken);
     }
     // set 100% to invest
-    _setToInvest(TO_INVEST_DENOMINATOR);
-    // set deposit fee
-    if (_depositFee > 0) {
-      require(_depositFee <= DEPOSIT_FEE_DENOMINATOR / 100);
-      _setDepositFeeNumerator(_depositFee);
-    }
+    toInvest = TO_INVEST_DENOMINATOR;
+    doHardWorkOnDeposit = true;
+    alwaysInvest = true;
   }
 
   // *************** EVENTS ***************************
@@ -132,14 +129,14 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   // *************** RESTRICTIONS ***************************
 
-  /// @dev Allow operation only for VaultController
-  function _onlyVaultController(address _sender) private view {
-    require(IController(_controller()).vaultController() == _sender, FORBIDDEN_MSG);
+  /// @dev Allow operation only for Governance
+  function _onlyGov(address _sender) private view {
+    require(IController(_controller()).governance() == _sender, FORBIDDEN_MSG);
   }
 
   /// @dev Allowed only for active strategy
   function _isActive() private view {
-    require(_active(), "SV: Not active");
+    require(active, "SV: Not active");
   }
 
   /// @dev Only smart contracts will be affected by this restriction
@@ -152,12 +149,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   /// @notice ERC20 compatible decimals value. Should be the same as underlying
   function decimals() public view override returns (uint8) {
-    return ERC20Upgradeable(_underlying()).decimals();
-  }
-
-  /// @dev Returns vault controller
-  function _vaultController() internal view returns (IVaultController){
-    return IVaultController(IController(_controller()).vaultController());
+    return ERC20Upgradeable(underlying).decimals();
   }
 
   // ************ GOVERNANCE ACTIONS ******************
@@ -165,8 +157,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @notice Change permission for decreasing ppfs during hard work process
   /// @param _value true - allowed, false - disallowed
   function changePpfsDecreaseAllowed(bool _value) external override {
-    _onlyVaultController(msg.sender);
-    _setPpfsDecreaseAllowed(_value);
+    _onlyGov(msg.sender);
+    ppfsDecreaseAllowed = _value;
   }
 
   /// @dev All rewards for given owner could be claimed for receiver address.
@@ -178,62 +170,51 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   /// @notice Set numerator for toInvest ratio in range 0 - 1000
   function setToInvest(uint256 _value) external override {
-    _onlyVaultController(msg.sender);
+    _onlyGov(msg.sender);
     require(_value <= TO_INVEST_DENOMINATOR);
-    _setToInvest(_value);
+    toInvest = _value;
   }
 
   /// @notice Change the active state marker
   /// @param _active Status true - active, false - deactivated
   function changeActivityStatus(bool _active) external override {
-    _onlyVaultController(msg.sender);
-    _setActive(_active);
-  }
-
-  /// @notice Change the protection mode status.
-  ///          Protection mode means claim rewards on withdraw and 0% initial reward boost
-  /// @param _active Status true - active, false - deactivated
-  function changeProtectionMode(bool _active) external override {
-    require(_isGovernance(msg.sender), FORBIDDEN_MSG);
-    _setProtectionMode(_active);
+    _onlyGov(msg.sender);
+    active = _active;
   }
 
   /// @notice If true we will call doHardWork for each invest action
   /// @param _active Status true - active, false - deactivated
-  function changeDoHardWorkOnInvest(bool _active) external override {
+  function changeDoHardWorkOnDeposit(bool _active) external override {
     require(_isGovernance(msg.sender), FORBIDDEN_MSG);
-    _setDoHardWorkOnInvest(_active);
+    doHardWorkOnDeposit = _active;
   }
 
   /// @notice If true we will call invest for each deposit
   /// @param _active Status true - active, false - deactivated
   function changeAlwaysInvest(bool _active) external override {
     require(_isGovernance(msg.sender), FORBIDDEN_MSG);
-    _setAlwaysInvest(_active);
+    alwaysInvest = _active;
   }
 
   /// @notice Earn some money for honest work
   function doHardWork() external override {
-    require(_isController(msg.sender) || _isGovernance(msg.sender), FORBIDDEN_MSG);
+    require(IController(_controller()).isHardWorker(msg.sender), FORBIDDEN_MSG);
     _invest();
-    // otherwise we already do
-    if (!_doHardWorkOnInvest()) {
-      _doHardWork();
-    }
+    _doHardWork();
   }
 
   function _doHardWork() internal {
     uint256 sharePriceBeforeHardWork = _getPricePerFullShare();
-    IStrategy(_strategy()).doHardWork();
-    require(ppfsDecreaseAllowed() || sharePriceBeforeHardWork <= _getPricePerFullShare(), "SV: PPFS decreased");
+    IStrategy(strategy).doHardWork();
+    require(ppfsDecreaseAllowed || sharePriceBeforeHardWork <= _getPricePerFullShare(), "SV: PPFS decreased");
   }
 
   /// @notice Add a reward token to the internal array
   /// @param rt Reward token address
   function addRewardToken(address rt) external override {
-    _onlyVaultController(msg.sender);
+    _onlyGov(msg.sender);
     require(_getRewardTokenIndex(rt) == type(uint256).max);
-    require(rt != _underlying());
+    require(rt != underlying);
     _rewardTokens.push(rt);
     emit AddedRewardToken(rt);
   }
@@ -241,7 +222,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @notice Remove reward token. Last token removal is not allowed
   /// @param rt Reward token address
   function removeRewardToken(address rt) external override {
-    _onlyVaultController(msg.sender);
+    _onlyGov(msg.sender);
     uint256 i = _getRewardTokenIndex(rt);
     require(i != type(uint256).max);
     require(periodFinishForToken[_rewardTokens[i]] < block.timestamp);
@@ -256,16 +237,16 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   /// @notice Withdraw all from strategy to the vault and invest again
   function rebalance() external override {
-    _onlyVaultController(msg.sender);
-    IStrategy(_strategy()).withdrawAllToVault();
+    _onlyGov(msg.sender);
+    IStrategy(strategy).withdrawAllToVault();
     _invest();
   }
 
   /// @notice Withdraw all from strategy to the vault
   function withdrawAllToVault() external override {
     require(address(_controller()) == msg.sender
-      || IController(_controller()).governance() == msg.sender, FORBIDDEN_MSG);
-    IStrategy(_strategy()).withdrawAllToVault();
+    || IController(_controller()).governance() == msg.sender, FORBIDDEN_MSG);
+    IStrategy(strategy).withdrawAllToVault();
   }
 
   //****************** USER ACTIONS ********************
@@ -277,7 +258,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     _onlyAllowedUsers(msg.sender);
 
     _deposit(amount, msg.sender, msg.sender);
-    if (_alwaysInvest()) {
+
+    if (alwaysInvest) {
       _invest();
     }
   }
@@ -299,7 +281,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     _onlyAllowedUsers(msg.sender);
 
     _deposit(amount, msg.sender, holder);
-    if (_alwaysInvest()) {
+    if (alwaysInvest) {
       _invest();
     }
   }
@@ -307,13 +289,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @notice Withdraw shares partially without touching rewards
   function withdraw(uint256 numberOfShares) external override {
     _onlyAllowedUsers(msg.sender);
-
-    // assume that allowed users is trusted contracts with internal specific logic
-    // for compatability we should not claim rewards on withdraw for them
-    if (_protectionMode() && !IController(_controller()).isAllowedUser(msg.sender)) {
-      _getAllRewards(msg.sender, msg.sender);
-    }
-
     _withdraw(numberOfShares);
   }
 
@@ -374,43 +349,6 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
     _updateRewards(from);
     _updateRewards(to);
-
-    // mint - assuming it is deposit action
-    if (from == address(0)) {
-      // new deposit
-      if (_underlyingBalanceWithInvestmentForHolder(to) == 0) {
-        userBoostTs[to] = block.timestamp;
-      }
-
-      // store current timestamp
-      userLastDepositTs[to] = block.timestamp;
-    } else if (to == address(0)) {
-      // burn - assuming it is withdraw action
-      userLastWithdrawTs[from] = block.timestamp;
-    } else {
-      // regular transfer
-
-      // we can't normally refresh lock timestamp for locked assets when it transfers to another account
-      // need to allow transfers for reward notification process and claim rewards
-      require(!_lockAllowed()
-      || to == address(this)
-      || from == address(this)
-      || from == _controller(), FORBIDDEN_MSG);
-
-      // if recipient didn't have deposit - start boost time
-      if (_underlyingBalanceWithInvestmentForHolder(to) == 0) {
-        userBoostTs[to] = block.timestamp;
-      }
-
-      // update only for new deposit for avoiding miscellaneous sending for reset the value
-      if (userLastDepositTs[to] == 0) {
-        userLastDepositTs[to] = block.timestamp;
-      }
-
-      // reset timer if token transferred
-      userLastWithdrawTs[from] = block.timestamp;
-    }
-
     super._beforeTokenTransfer(from, to, amount);
   }
 
@@ -422,7 +360,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   }
 
   function _underlyingUnit() internal view returns (uint256) {
-    return 10 ** uint256(ERC20Upgradeable(address(_underlying())).decimals());
+    return 10 ** uint256(ERC20Upgradeable(address(underlying)).decimals());
   }
 
   /// @notice Returns the cash balance across all users in this contract.
@@ -431,7 +369,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   }
 
   function _underlyingBalanceInVault() internal view returns (uint256) {
-    return IERC20(_underlying()).balanceOf(address(this));
+    return IERC20(underlying).balanceOf(address(this));
   }
 
   /// @notice Returns the current underlying (e.g., DAI's) balance together with
@@ -442,8 +380,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   function _underlyingBalanceWithInvestment() internal view returns (uint256) {
     return VaultLibrary.underlyingBalanceWithInvestment(
-      _strategy(),
-      IERC20(_underlying()).balanceOf(address(this))
+      strategy,
+      IERC20(underlying).balanceOf(address(this))
     );
   }
 
@@ -470,8 +408,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   function _getPricePerFullShare() internal view returns (uint256) {
     return totalSupply() == 0
-    ? _underlyingUnit()
-    : _underlyingUnit() * _underlyingBalanceWithInvestment() / totalSupply();
+      ? _underlyingUnit()
+      : _underlyingUnit() * _underlyingBalanceWithInvestment() / totalSupply();
   }
 
   /// @notice Return amount of the underlying asset ready to invest to the strategy
@@ -481,8 +419,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   function _availableToInvestOut() internal view returns (uint256) {
     return VaultLibrary.availableToInvestOut(
-      _strategy(),
-      _toInvest(),
+      strategy,
+      toInvest,
       _underlyingBalanceInVault()
     );
   }
@@ -490,8 +428,8 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @notice Burn shares, withdraw underlying from strategy
   ///         and send back to the user the underlying asset
   function _withdraw(uint256 numberOfShares) internal {
-    require(!_reentrantLock(), "SV: Reentrant call");
-    _setReentrantLock(true);
+    require(!_reentrantLock, "SV: Reentrant call");
+    _reentrantLock = true;
     _updateRewards(msg.sender);
     require(totalSupply() > 0, "SV: No shares for withdraw");
     require(numberOfShares > 0, "SV: Zero amount for withdraw");
@@ -501,18 +439,18 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
     uint256 underlyingAmountToWithdraw = VaultLibrary.processWithdrawFromStrategy(
       numberOfShares,
-      _underlying(),
+      underlying,
       _totalSupply,
-      _toInvest(),
-      _strategy()
+      toInvest,
+      strategy
     );
 
     // need to burn shares after strategy withdraw for properly PPFS calculation
     _burn(msg.sender, numberOfShares);
 
-    IERC20(_underlying()).safeTransfer(msg.sender, underlyingAmountToWithdraw);
+    IERC20(underlying).safeTransfer(msg.sender, underlyingAmountToWithdraw);
 
-    _setReentrantLock(false);
+    _reentrantLock = false;
     // update the withdrawal amount for the holder
     emit Withdraw(msg.sender, underlyingAmountToWithdraw);
   }
@@ -520,38 +458,42 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   /// @notice Mint shares and transfer underlying from user to the vault
   ///         New shares = (invested amount * total supply) / underlyingBalanceWithInvestment()
   function _deposit(uint256 amount, address sender, address beneficiary) internal {
-    require(!_reentrantLock(), "SV: Reentrant call");
-    _setReentrantLock(true);
+    require(!_reentrantLock, "SV: Reentrant call");
+    _reentrantLock = true;
     _updateRewards(beneficiary);
     require(amount > 0, "SV: Zero amount");
     require(beneficiary != address(0), "SV: Zero beneficiary for deposit");
 
+    address _strategy = strategy;
+    require(_strategy != address(0));
+    // avoid recursive hardworks
+    if (doHardWorkOnDeposit && msg.sender != _strategy) {
+      _doHardWork();
+    }
+
     uint256 toMint = totalSupply() == 0
-    ? amount
-    : amount * totalSupply() / _underlyingBalanceWithInvestment();
+      ? amount
+      : amount * totalSupply() / _underlyingBalanceWithInvestment();
     // no revert for this case for keep compatability
     if (toMint != 0) {
-      toMint = toMint * (DEPOSIT_FEE_DENOMINATOR - _depositFeeNumerator()) / DEPOSIT_FEE_DENOMINATOR;
       _mint(beneficiary, toMint);
 
-      IERC20(_underlying()).safeTransferFrom(sender, address(this), amount);
+      IERC20(underlying).safeTransferFrom(sender, address(this), amount);
 
       emit Deposit(beneficiary, amount);
     }
-    _setReentrantLock(false);
+    _reentrantLock = false;
   }
 
   /// @notice Transfer underlying to the strategy
   function _invest() internal {
-    require(_strategy() != address(0));
-    // avoid recursive hardworks
-    if (_doHardWorkOnInvest() && msg.sender != _strategy()) {
-      _doHardWork();
-    }
+    address _strategy = strategy;
+    require(_strategy != address(0));
+
     uint256 availableAmount = _availableToInvestOut();
     if (availableAmount > 0) {
-      IERC20(_underlying()).safeTransfer(address(_strategy()), availableAmount);
-      IStrategy(_strategy()).investAllUnderlying();
+      IERC20(underlying).safeTransfer(_strategy, availableAmount);
+      IStrategy(_strategy).investAllUnderlying();
       emit Invest(availableAmount);
     }
   }
@@ -587,19 +529,7 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     return balanceOf(account)
     * (_rewardPerToken(rt) - userRewardPerTokenPaidForToken[rt][account])
     / 1e18
-    + rewardsForToken[rt][account];
-  }
-
-  /// @notice Return amount ready to claim, calculated with actual boost
-  ///         Accurate value returns only after updateRewards call
-  function earnedWithBoost(address rt, address account) external view override returns (uint256) {
-    return VaultLibrary.earnedWithBoost(
-      rt,
-      _earned(rt, account),
-      userBoostTs[account],
-      _controller(),
-      _protectionMode()
-    );
+      + rewardsForToken[rt][account];
   }
 
   /// @notice Return reward per token ratio by reward token address
@@ -616,11 +546,11 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
       return rewardPerTokenStoredForToken[rt];
     }
     return
-    rewardPerTokenStoredForToken[rt] + (
-    (_lastTimeRewardApplicable(rt) - lastUpdateTimeForToken[rt])
-    * rewardRateForToken[rt]
-    * 1e18
-    / totalSupplyWithoutItself
+      rewardPerTokenStoredForToken[rt] + (
+      (_lastTimeRewardApplicable(rt) - lastUpdateTimeForToken[rt])
+      * rewardRateForToken[rt]
+      * 1e18
+      / totalSupplyWithoutItself
     );
   }
 
@@ -671,24 +601,26 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
     uint256 i = _getRewardTokenIndex(_rewardToken);
     require(i != type(uint256).max, "SV: RT not found");
 
+    uint _duration = duration;
+
     IERC20(_rewardToken).safeTransferFrom(msg.sender, address(this), amount);
 
     if (block.timestamp >= periodFinishForToken[_rewardToken]) {
-      rewardRateForToken[_rewardToken] = amount / duration();
+      rewardRateForToken[_rewardToken] = amount / _duration;
     } else {
       uint256 remaining = periodFinishForToken[_rewardToken] - block.timestamp;
       uint256 leftover = remaining * rewardRateForToken[_rewardToken];
-      rewardRateForToken[_rewardToken] = (amount + leftover) / duration();
+      rewardRateForToken[_rewardToken] = (amount + leftover) / _duration;
     }
     lastUpdateTimeForToken[_rewardToken] = block.timestamp;
-    periodFinishForToken[_rewardToken] = block.timestamp + duration();
+    periodFinishForToken[_rewardToken] = block.timestamp + _duration;
 
     // Ensure the provided reward amount is not more than the balance in the contract.
     // This keeps the reward rate in the right range, preventing overflows due to
     // very high values of rewardRate in the earned and rewardsPerToken functions;
     // Reward + leftover must be less than 2^256 / 10^18 to avoid overflow.
     uint balance = IERC20(_rewardToken).balanceOf(address(this));
-    require(rewardRateForToken[_rewardToken] <= balance / duration(), "SV: Provided reward too high");
+    require(rewardRateForToken[_rewardToken] <= balance / _duration, "SV: Provided reward too high");
     emit RewardAdded(_rewardToken, amount);
   }
 
@@ -702,21 +634,15 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   /// @notice Transfer earned rewards to rewardsReceiver
   function _payRewardTo(address rt, address owner, address receiver) internal {
-    (uint renotifiedAmount, uint paidReward) = VaultLibrary.processPayRewardFor(
+    (uint paidReward) = VaultLibrary.processPayRewardFor(
       rt,
       _earned(rt, owner),
-      userBoostTs,
-      _controller(),
-      _protectionMode(),
       rewardsForToken,
       owner,
       receiver
     );
-    if (renotifiedAmount != 0) {
-      _notifyRewardWithoutPeriodChange(renotifiedAmount, rt);
-    }
     if (paidReward != 0) {
-      emit RewardPaid(owner, rt, renotifiedAmount);
+      emit RewardPaid(owner, rt, paidReward);
     }
   }
 
@@ -743,9 +669,9 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
 
   /// @notice Disable strategy and move rewards to controller
   function stop() external override {
-    _onlyVaultController(msg.sender);
-    IStrategy(_strategy()).withdrawAllToVault();
-    _setActive(false);
+    _onlyGov(msg.sender);
+    IStrategy(strategy).withdrawAllToVault();
+    active = false;
 
     for (uint256 i = 0; i < _rewardTokens.length; i++) {
       address rt = _rewardTokens[i];
@@ -765,9 +691,9 @@ contract SmartVault is Initializable, ERC20Upgradeable, VaultStorage, Controllab
   ///         Should be called via controller
   function setStrategy(address newStrategy) external override {
     // the main functionality moved to library for reduce contract size
-    VaultLibrary.changeStrategy(_controller(), _underlying(), newStrategy, _strategy());
-    emit StrategyChanged(newStrategy, _strategy());
-    _setStrategy(newStrategy);
+    VaultLibrary.changeStrategy(_controller(), underlying, newStrategy, strategy);
+    emit StrategyChanged(newStrategy, strategy);
+    strategy = newStrategy;
   }
 
 }

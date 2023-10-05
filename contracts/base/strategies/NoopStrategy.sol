@@ -29,7 +29,7 @@ contract NoopStrategy is StrategyBase {
   uint256 private constant _BUY_BACK_RATIO = 100_00;
   /// @dev Assets should reflect underlying tokens for investing
   address[] private _assets;
-  Platform private _platform;
+  uint private _platform;
 
   /// @notice Contract constructor
   /// @param _controller Controller address
@@ -46,7 +46,7 @@ contract NoopStrategy is StrategyBase {
     uint256 __platform
   ) StrategyBase(_controller, _underlying, _vault, __rewardTokens, _BUY_BACK_RATIO) {
     _assets = __assets;
-    _platform = Platform(__platform);
+    _platform = __platform;
   }
 
   function delegateVotes(address _delegateContract, address _delegate, bytes32 id) external restricted {
@@ -86,7 +86,7 @@ contract NoopStrategy is StrategyBase {
 
   /// @dev Platform name for statistical purposes
   /// @return Platform enum index
-  function platform() external override view returns (Platform) {
+  function platform() external override view returns (uint) {
     return _platform;
   }
 

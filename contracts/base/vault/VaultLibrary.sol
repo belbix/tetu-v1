@@ -18,7 +18,6 @@ import "../../openzeppelin/Math.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IControllable.sol";
 import "../interfaces/IController.sol";
-import "../interfaces/IVaultController.sol";
 import "../interfaces/IBookkeeper.sol";
 
 /// @title Library for SmartVault
@@ -161,102 +160,20 @@ library VaultLibrary {
     return (numberOfSharesAdjusted, lockedSharesToReward);
   }
 
-  /// @notice Return amount ready to claim, calculated with actual boost.
-  ///         Accurate value returns only after updateRewards call.
-  function earnedWithBoost(
-    address rt,
-    uint reward,
-    uint boostStart,
-    address controller,
-    bool protectionMode
-  ) public view returns (uint) {
-    // if we don't have a record we assume that it was deposited before boost logic and use 100% boost
-    if (_isBoostProtected(controller, rt) && boostStart != 0 && boostStart < block.timestamp) {
-      uint currentBoostDuration = block.timestamp - boostStart;
-      // not 100% boost
-      IVaultController _vaultController = IVaultController(IController(controller).vaultController());
-      uint boostDuration = _vaultController.rewardBoostDuration();
-      uint rewardRatioWithoutBoost = _vaultController.rewardRatioWithoutBoost();
-      if (protectionMode) {
-        rewardRatioWithoutBoost = 0;
-      }
-      if (currentBoostDuration < boostDuration) {
-        uint rewardWithoutBoost = reward * rewardRatioWithoutBoost / 100;
-        // calculate boosted part of rewards
-        reward = rewardWithoutBoost + (
-        (reward - rewardWithoutBoost) * currentBoostDuration / boostDuration
-        );
-      }
-    }
-    return reward;
-  }
-
-  /// @notice Transfer earned rewards to caller
-  /// @notice for backward compatibility with SmartVaultV110
-  function processPayReward(
-    address rt,
-    uint reward,
-    mapping(address => uint256) storage userBoostTs,
-    address controller,
-    bool protectionMode,
-    mapping(address => mapping(address => uint256)) storage rewardsForToken
-  ) public returns (uint renotifiedAmount, uint paidReward) {
-    return processPayRewardFor(rt, reward, userBoostTs, controller, protectionMode, rewardsForToken, msg.sender, msg.sender);
-  }
-
   /// @notice Transfer earned rewards to rewardsReceiver
   function processPayRewardFor(
     address rt,
     uint reward,
-    mapping(address => uint256) storage userBoostTs,
-    address controller,
-    bool protectionMode,
     mapping(address => mapping(address => uint256)) storage rewardsForToken,
     address owner,
     address receiver
-  ) public returns (uint renotifiedAmount, uint paidReward) {
+  ) public returns (uint paidReward) {
     paidReward = reward;
     if (paidReward > 0 && IERC20(rt).balanceOf(address(this)) >= paidReward) {
-      // calculate boosted amount
-      uint256 boostStart = userBoostTs[owner];
-      // refresh boost
-      userBoostTs[owner] = block.timestamp;
-      // if we don't have a record we assume that it was deposited before boost logic and use 100% boost
-      // allow claim without penalty to some addresses, TetuSwap pairs as example
-      if (
-        _isBoostProtected(controller, rt)
-        && boostStart != 0
-        && boostStart < block.timestamp
-        && !IController(controller).isPoorRewardConsumer(owner)
-      ) {
-        uint256 currentBoostDuration = block.timestamp - boostStart;
-        IVaultController _vaultController = IVaultController(IController(controller).vaultController());
-        // not 100% boost
-        uint256 boostDuration = _vaultController.rewardBoostDuration();
-        uint256 rewardRatioWithoutBoost = _vaultController.rewardRatioWithoutBoost();
-        if (protectionMode) {
-          rewardRatioWithoutBoost = 0;
-        }
-        if (currentBoostDuration < boostDuration) {
-          uint256 rewardWithoutBoost = paidReward * rewardRatioWithoutBoost / 100;
-          // calculate boosted part of rewards
-          uint256 toClaim = rewardWithoutBoost + (
-          (paidReward - rewardWithoutBoost) * currentBoostDuration / boostDuration
-          );
-          renotifiedAmount = paidReward - toClaim;
-          paidReward = toClaim;
-          // notify reward should be called in vault
-        }
-      }
-
       rewardsForToken[rt][owner] = 0;
       IERC20(rt).safeTransfer(receiver, paidReward);
     }
-    return (renotifiedAmount, paidReward);
-  }
-
-  function _isBoostProtected(address controller, address token) internal view returns (bool){
-    return IController(controller).rewardToken() == token || IController(controller).psVault() == token;
+    return (paidReward);
   }
 
 }

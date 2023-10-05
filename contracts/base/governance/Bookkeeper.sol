@@ -16,7 +16,6 @@ import "./ControllableV2.sol";
 import "../interfaces/IBookkeeper.sol";
 import "../interfaces/ISmartVault.sol";
 import "../interfaces/IStrategy.sol";
-import "../interfaces/IStrategySplitter.sol";
 
 /// @title Contract for holding statistical info and doesn't affect any funds.
 /// @dev Only non critical functions. Use with TetuProxy

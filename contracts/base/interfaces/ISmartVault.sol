@@ -32,32 +32,23 @@ interface ISmartVault {
 
   function changeAlwaysInvest(bool _active) external;
 
-  function changeDoHardWorkOnInvest(bool _active) external;
+  function changeDoHardWorkOnDeposit(bool _active) external;
 
   function changePpfsDecreaseAllowed(bool _value) external;
-
-  function changeProtectionMode(bool _active) external;
 
   function deposit(uint256 amount) external;
 
   function depositAndInvest(uint256 amount) external;
 
-  function depositFeeNumerator() external view returns (uint256);
-
   function depositFor(uint256 amount, address holder) external;
 
   function doHardWork() external;
 
-  function doHardWorkOnInvest() external view returns (bool);
+  function doHardWorkOnDeposit() external view returns (bool);
 
   function duration() external view returns (uint256);
 
   function earned(address rt, address account)
-  external
-  view
-  returns (uint256);
-
-  function earnedWithBoost(address rt, address account)
   external
   view
   returns (uint256);
@@ -80,9 +71,7 @@ interface ISmartVault {
     address _controller,
     address __underlying,
     uint256 _duration,
-    bool _lockAllowed,
-    address _rewardToken,
-    uint256 _depositFee
+    address _rewardToken
   ) external;
 
   function lastTimeRewardApplicable(address rt)
@@ -91,10 +80,6 @@ interface ISmartVault {
   returns (uint256);
 
   function lastUpdateTimeForToken(address) external view returns (uint256);
-
-  function lockAllowed() external view returns (bool);
-
-  function lockPenalty() external view returns (uint256);
 
   function notifyRewardWithoutPeriodChange(
     address _rewardToken,
@@ -107,8 +92,6 @@ interface ISmartVault {
   function periodFinishForToken(address) external view returns (uint256);
 
   function ppfsDecreaseAllowed() external view returns (bool);
-
-  function protectionMode() external view returns (bool);
 
   function rebalance() external;
 
@@ -154,12 +137,6 @@ interface ISmartVault {
 
   function underlyingUnit() external view returns (uint256);
 
-  function userBoostTs(address) external view returns (uint256);
-
-  function userLastDepositTs(address) external view returns (uint256);
-
-  function userLastWithdrawTs(address) external view returns (uint256);
-
   function userRewardPerTokenPaidForToken(address, address)
   external
   view
@@ -170,6 +147,4 @@ interface ISmartVault {
   function withdrawAllToVault() external;
 
   function getAllRewardsFor(address rewardsReceiver) external;
-
-  function lockPeriod() external view returns (uint256);
 }

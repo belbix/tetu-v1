@@ -13,7 +13,6 @@
 pragma solidity 0.8.19;
 
 import "./ControllableV2.sol";
-import "./ControllerStorage.sol";
 import "../interfaces/IAnnouncer.sol";
 
 /// @title Contract for holding scheduling for time-lock actions
@@ -23,7 +22,7 @@ contract Announcer is ControllableV2, IAnnouncer {
 
   /// @notice Version of the contract
   /// @dev Should be incremented when contract is changed
-  string public constant override VERSION = "1.2.0";
+  string public constant override VERSION = "2.0.0";
   bytes32 internal constant _TIME_LOCK_SLOT = 0x244FE7C39AF244D294615908664E79A2F65DD3F4D5C387AF1D52197F465D1C2E;
 
   /// @dev Hold schedule for time-locked operations
@@ -84,19 +83,10 @@ contract Announcer is ControllableV2, IAnnouncer {
   }
 
   /// @dev Operations allowed for Governance or Dao addresses
-  modifier onlyGovernanceOrDao() {
-    require(_isGovernance(msg.sender)
-      || IController(_controller()).isDao(msg.sender), "not governance or dao");
-    _;
-  }
-
-  /// @dev Operations allowed for Governance or Dao addresses
   modifier onlyControlMembers() {
     require(
       _isGovernance(msg.sender)
       || _isController(msg.sender)
-      || IController(_controller()).isDao(msg.sender)
-      || IController(_controller()).vaultController() == msg.sender
     , "not control member");
     _;
   }
@@ -181,7 +171,7 @@ contract Announcer is ControllableV2, IAnnouncer {
   ///                 10 - FundRatio
   /// @param numerator New numerator
   /// @param denominator New denominator
-  function announceRatioChange(TimeLockOpCodes opCode, uint256 numerator, uint256 denominator) external override onlyGovernanceOrDao {
+  function announceRatioChange(TimeLockOpCodes opCode, uint256 numerator, uint256 denominator) external override onlyGovernance {
     require(timeLockIndexes[opCode] == 0, "already announced");
     require(numerator <= denominator, "invalid values");
     require(denominator != 0, "cannot divide by 0");
@@ -222,41 +212,6 @@ contract Announcer is ControllableV2, IAnnouncer {
     timeLockIndexes[opCode] = (_timeLockInfos.length - 1);
 
     emit TokenMoveAnnounced(opCode, target, token, amount);
-  }
-
-  /// @notice Only Governance can do it. Announce weekly mint. You will able to mint after Time-lock period
-  /// @param totalAmount Total amount to mint.
-  ///                    33% will go to current network, 67% to FundKeeper for other networks
-  /// @param _distributor Distributor address, usually NotifyHelper
-  /// @param _otherNetworkFund Fund address, usually FundKeeper
-  function announceMint(
-    uint256 totalAmount,
-    address _distributor,
-    address _otherNetworkFund,
-    bool mintAllAvailable
-  ) external override onlyGovernance {
-    TimeLockOpCodes opCode = TimeLockOpCodes.Mint;
-
-    require(timeLockIndexes[opCode] == 0, "already announced");
-    require(totalAmount != 0 || mintAllAvailable, "zero amount");
-    require(_distributor != address(0), "zero distributor");
-    require(_otherNetworkFund != address(0), "zero fund");
-
-    bytes32 opHash = keccak256(abi.encode(opCode, totalAmount, _distributor, _otherNetworkFund, mintAllAvailable));
-    timeLockSchedule[opHash] = block.timestamp + timeLock();
-
-    address[] memory adrValues = new address[](2);
-    adrValues[0] = _distributor;
-    adrValues[1] = _otherNetworkFund;
-    uint256[] memory intValues = new uint256[](1);
-    intValues[0] = totalAmount;
-
-    address mintHelper = IController(_controller()).mintHelper();
-
-    _timeLockInfos.push(TimeLockInfo(opCode, opHash, mintHelper, adrValues, intValues));
-    timeLockIndexes[opCode] = _timeLockInfos.length - 1;
-
-    emit MintAnnounced(totalAmount, _distributor, _otherNetworkFund);
   }
 
   /// @notice Only Governance can do it. Announce Batch Proxy upgrade

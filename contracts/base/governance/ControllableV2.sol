@@ -14,7 +14,6 @@ pragma solidity 0.8.19;
 
 import "../../openzeppelin/Initializable.sol";
 import "../interfaces/IControllable.sol";
-import "../interfaces/IControllableExtended.sol";
 import "../interfaces/IController.sol";
 
 /// @title Implement basic functionality for any contract that require strict control
@@ -22,7 +21,7 @@ import "../interfaces/IController.sol";
 /// @dev Can be used with upgradeable pattern.
 ///      Require call initializeControllable() in any case.
 /// @author belbix
-abstract contract ControllableV2 is Initializable, IControllable, IControllableExtended {
+abstract contract ControllableV2 is Initializable, IControllable {
 
   bytes32 internal constant _CONTROLLER_SLOT = bytes32(uint256(keccak256("eip1967.controllable.controller")) - 1);
   bytes32 internal constant _CREATED_SLOT = bytes32(uint256(keccak256("eip1967.controllable.created")) - 1);

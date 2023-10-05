@@ -58,13 +58,6 @@ interface IAnnouncer {
 
   function announceAddressChange(TimeLockOpCodes opCode, address newAddress) external;
 
-  function announceMint(
-    uint256 totalAmount,
-    address _distributor,
-    address _otherNetworkFund,
-    bool mintAllAvailable
-  ) external;
-
   function announceRatioChange(
     TimeLockOpCodes opCode,
     uint256 numerator,

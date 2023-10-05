@@ -21,9 +21,6 @@ async function main() {
   // ************ ANNOUNCER **********
   const announcerData = await DeployerUtils.deployAnnouncer(signer, controller.address, TIME_LOCK);
 
-  // ************ VAULT CONTROLLER **********
-  const vaultControllerData = await DeployerUtils.deployVaultController(signer, controller.address);
-
 
   // ********** BOOKKEEPER **********
   const bookkeeperLogic = await DeployerUtils.deployContract(signer, "Bookkeeper");
@@ -34,17 +31,11 @@ async function main() {
   // ******* SETUP CONTROLLER ********
   await RunHelper.runAndWait(() => controller.setBookkeeper(bookkeeper.address));
   await RunHelper.runAndWait(() => controller.setAnnouncer(announcerData[0].address));
-  await RunHelper.runAndWait(() => controller.setVaultController(vaultControllerData[0].address));
 
-  writeFileSync('./core_addresses.txt',
+  writeFileSync('./tmp/core_addresses.txt',
     controller.address + ', // controller\n' +
     announcerData[0].address + ', // announcer\n' +
-     ', // feeRewardForwarder\n' +
-    bookkeeper.address + ', // bookkeeper\n' +
-    ', // rewardToken\n' +
-    ', // psVault\n' +
-    ', // fundKeeper\n' +
-    vaultControllerData[0].address + ', // vault controller\n'
+    bookkeeper.address + ', // bookkeeper\n'
     , 'utf8');
 }
 

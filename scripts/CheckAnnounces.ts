@@ -1,7 +1,7 @@
 import {ethers} from "hardhat";
-import {DeployerUtils} from "../../deploy/DeployerUtils";
-import {Announcer} from "../../../typechain";
 import {appendFileSync} from "fs";
+import { DeployerUtils } from './deploy/DeployerUtils';
+import { Announcer } from '../typechain';
 
 const IDS = new Map<number, string>([
   [0, 'Governance'],

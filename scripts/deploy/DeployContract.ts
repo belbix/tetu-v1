@@ -10,8 +10,6 @@ const log: Logger<undefined> = new Logger(logSettings);
 
 const libraries = new Map<string, string[]>([
   ['SmartVault', ['VaultLibrary',]],
-  ['SmartVaultV110', ['VaultLibrary',]],
-  ['ZapV2', ['ZapV2UniswapLibrary', 'ZapV2Balancer1Library', 'ZapV2Balancer2Library',]],
 ]);
 
 export async function deployContract<T extends ContractFactory>(

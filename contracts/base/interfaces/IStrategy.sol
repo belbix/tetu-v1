@@ -14,60 +14,6 @@ pragma solidity 0.8.19;
 
 interface IStrategy {
 
-  enum Platform {
-    UNKNOWN, // 0
-    TETU, // 1
-    QUICK, // 2
-    SUSHI, // 3
-    WAULT, // 4
-    IRON, // 5
-    COSMIC, // 6
-    CURVE, // 7
-    DINO, // 8
-    IRON_LEND, // 9
-    HERMES, // 10
-    CAFE, // 11
-    TETU_SWAP, // 12
-    SPOOKY, // 13
-    AAVE_LEND, //14
-    AAVE_MAI_BAL, // 15
-    GEIST, //16
-    HARVEST, //17
-    SCREAM_LEND, //18
-    KLIMA, //19
-    VESQ, //20
-    QIDAO, //21
-    SUNFLOWER, //22
-    NACHO, //23
-    STRATEGY_SPLITTER, //24
-    TOMB, //25
-    TAROT, //26
-    BEETHOVEN, //27
-    IMPERMAX, //28
-    TETU_SF, //29
-    ALPACA, //30
-    MARKET, //31
-    UNIVERSE, //32
-    MAI_BAL, //33
-    UMA, //34
-    SPHERE, //35
-    BALANCER, //36
-    OTTERCLAM, //37
-    MESH, //38
-    D_FORCE, //39
-    DYSTOPIA, //40
-    CONE, //41
-    AURA, //42
-    COMPOUND, //43
-    ZEROVIX, //44
-    CONVEX, //45
-    TANGIBLE, //46
-    VENUS, //47
-    RADIANT2, //48
-    WOMBEX, //49
-    SLOT_50 //50
-  }
-
   // *************** GOVERNANCE ACTIONS **************
   function STRATEGY_NAME() external view returns (string memory);
 
@@ -104,7 +50,7 @@ interface IStrategy {
 
   function investedUnderlyingBalance() external view returns (uint256);
 
-  function platform() external view returns (Platform);
+  function platform() external view returns (uint);
 
   function assets() external view returns (address[] memory);
 

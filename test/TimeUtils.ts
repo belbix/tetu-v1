@@ -39,14 +39,6 @@ export class TimeUtils {
     await ethers.provider.send('evm_setNextBlockTimestamp', [blockNumber]);
   }
 
-  // doesn't work, need to investigate
-  public static async currentBlock() {
-    const tools = await DeployerUtils.getToolsAddresses();
-    const multicall = Multicall__factory.connect(tools.multicall, ethers.provider);
-    const blockHash = await multicall.getLastBlockHash();
-    return (await ethers.provider.getBlock(blockHash)).number;
-  }
-
   public static async getBlockTime(multicall: Multicall, block?: number | null): Promise<number> {
     if (block) {
       return (await multicall.getCurrentBlockTimestamp({blockTag: block})).toNumber();

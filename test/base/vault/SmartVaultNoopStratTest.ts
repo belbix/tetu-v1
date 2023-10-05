@@ -48,7 +48,7 @@ describe('SmartVaultNoopStrat', () => {
     vault = await DeployerUtils.deploySmartVault(signer);
 
     strategy = await DeployerUtils.deployContract(signer, 'NoopStrategy',
-      core.controller.address, usdc, vault.address, [Misc.ZERO_ADDRESS], [usdc], 1,
+      core.controller.address, usdc, vault.address, 1,
     ) as NoopStrategy;
 
     await vault.initializeSmartVault(

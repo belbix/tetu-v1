@@ -66,7 +66,7 @@ describe('Smart vault rewards test', () => {
     // ******** DEPLOY VAULT *******
     const vault = await DeployerUtils.deploySmartVault(signer);
     const strategy = await DeployerUtils.deployContract(signer, 'NoopStrategy',
-      core.controller.address, underlying, vault.address, [Misc.ZERO_ADDRESS], [networkToken, usdc], 1,
+      core.controller.address, underlying, vault.address, 1,
     ) as NoopStrategy;
     await vault.initializeSmartVault(
       'NOOP',
@@ -450,7 +450,7 @@ describe('Smart vault rewards test', () => {
     // ******** DEPLOY VAULT *******
     const vault = await DeployerUtils.deploySmartVault(signer);
     const strategy = await DeployerUtils.deployContract(signer, 'NoopStrategy',
-      core.controller.address, underlying, vault.address, [Misc.ZERO_ADDRESS], [networkToken, usdc], 1,
+      core.controller.address, underlying, vault.address, 1,
     ) as NoopStrategy;
     await vault.initializeSmartVault(
       'NOOP',

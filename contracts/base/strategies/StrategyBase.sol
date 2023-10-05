@@ -22,11 +22,8 @@ abstract contract StrategyBase is IStrategy, ControllableV2 {
   address internal _underlyingToken;
   address internal _smartVault;
   mapping(address => bool) internal _unsalvageableTokens;
-  /// @dev Buyback numerator - reflects but does not guarantee that this percent of the profit will go to distribution
-  uint256 internal _buyBackRatio;
   /// @dev When this flag is true, the strategy will not be able to invest. But users should be able to withdraw.
   bool public override pausedInvesting = false;
-  address[] internal _rewardTokens;
 
 
   //************************ MODIFIERS **************************
@@ -63,36 +60,18 @@ abstract contract StrategyBase is IStrategy, ControllableV2 {
   /// @param _controller Controller address
   /// @param _underlying Underlying token address
   /// @param _vault SmartVault address that will provide liquidity
-  /// @param __rewardTokens Reward tokens that the strategy will farm
-  /// @param _bbRatio Buy back ratio
   constructor(
     address _controller,
     address _underlying,
-    address _vault,
-    address[] memory __rewardTokens,
-    uint256 _bbRatio
+    address _vault
   ) {
     ControllableV2.initializeControllable(_controller);
     _underlyingToken = _underlying;
     _smartVault = _vault;
-    _rewardTokens = __rewardTokens;
-    require(_bbRatio <= _BUY_BACK_DENOMINATOR, "SB: Too high buyback ratio");
-    _buyBackRatio = _bbRatio;
-
-    // prohibit the movement of tokens that are used in the main logic
-    for (uint256 i = 0; i < _rewardTokens.length; i++) {
-      _unsalvageableTokens[_rewardTokens[i]] = true;
-    }
     _unsalvageableTokens[_underlying] = true;
   }
 
   // *************** VIEWS ****************
-
-  /// @notice Reward tokens of external project
-  /// @return Reward tokens array
-  function rewardTokens() public view override returns (address[] memory) {
-    return _rewardTokens;
-  }
 
   /// @notice Strategy underlying, the same in the Vault
   /// @return Strategy underlying token
@@ -116,18 +95,6 @@ abstract contract StrategyBase is IStrategy, ControllableV2 {
   /// @return True if given token unsalvageable
   function unsalvageableTokens(address token) external override view returns (bool) {
     return _unsalvageableTokens[token];
-  }
-
-  /// @notice Strategy buy back ratio. Currently stubbed to 100%
-  /// @return Buy back ratio
-  function buyBackRatio() external view override returns (uint256) {
-    return _buyBackRatio;
-  }
-
-  /// @notice Balance of given token on this contract
-  /// @return Balance of given token
-  function rewardBalance(uint256 rewardTokenIdx) public view returns (uint256) {
-    return IERC20(_rewardTokens[rewardTokenIdx]).balanceOf(address(this));
   }
 
   /// @notice Return underlying balance + balance in the reward pool

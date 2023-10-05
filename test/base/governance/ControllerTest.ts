@@ -74,7 +74,7 @@ describe("Controller tests", function () {
       Misc.ZERO_ADDRESS,
     );
     const strategy = await DeployerUtils.deployContract(signer, "NoopStrategy",
-      controller.address, usdc, vault.address, [], [usdc], 1) as NoopStrategy;
+      controller.address, usdc, vault.address, 1) as NoopStrategy;
     await controller.addVaultsAndStrategies([vault.address], [strategy.address]);
     expect(await controller.isValidVault(vault.address)).at.eq(true);
     expect(await controller.strategies(strategy.address)).at.eq(true);

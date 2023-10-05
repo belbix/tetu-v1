@@ -15,28 +15,19 @@ contract NoopStrategy is StrategyBase {
   string public constant override STRATEGY_NAME = "NoopStrategy";
   /// @notice Version of the contract
   /// @dev Should be incremented when contract changed
-  string public constant VERSION = "1.1.1";
-  /// @dev Placeholder, for non full buyback need to implement liquidation
-  uint256 private constant _BUY_BACK_RATIO = 100_00;
-  /// @dev Assets should reflect underlying tokens for investing
-  address[] private _assets;
+  string public constant VERSION = "2.0.0";
   uint private _platform;
 
   /// @notice Contract constructor
   /// @param _controller Controller address
   /// @param _underlying Underlying token address
   /// @param _vault SmartVault address that will provide liquidity
-  /// @param __rewardTokens Reward tokens that the strategy will farm
-  /// @param __assets Single tokens that need for investing
   constructor(
     address _controller,
     address _underlying,
     address _vault,
-    address[] memory __rewardTokens,
-    address[] memory __assets,
     uint256 __platform
-  ) StrategyBase(_controller, _underlying, _vault, __rewardTokens, _BUY_BACK_RATIO) {
-    _assets = __assets;
+  ) StrategyBase(_controller, _underlying, _vault) {
     _platform = __platform;
   }
 
@@ -79,23 +70,6 @@ contract NoopStrategy is StrategyBase {
   /// @return Platform enum index
   function platform() external override view returns (uint) {
     return _platform;
-  }
-
-  /// @dev Single Tokens that need to have for investing. Using for statistical purposes
-  /// @return Array of assets
-  function assets() external override view returns (address[] memory) {
-    return _assets;
-  }
-
-  /// @dev Stub function for Strategy Base implementation
-  function readyToClaim() external pure override returns (uint256[] memory) {
-    uint256[] memory toClaim = new uint256[](1);
-    return toClaim;
-  }
-
-  /// @dev Stub function for Strategy Base implementation
-  function poolTotalAmount() external pure override returns (uint256) {
-    return 0;
   }
 
 }

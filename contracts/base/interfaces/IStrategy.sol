@@ -25,15 +25,12 @@ interface IStrategy {
   function continueInvesting() external;
 
   // **************** VIEWS ***************
-  function rewardTokens() external view returns (address[] memory);
 
   function underlying() external view returns (address);
 
   function underlyingBalance() external view returns (uint256);
 
   function rewardPoolBalance() external view returns (uint256);
-
-  function buyBackRatio() external view returns (uint256);
 
   function unsalvageableTokens(address token) external view returns (bool);
 
@@ -43,11 +40,5 @@ interface IStrategy {
 
   function platform() external view returns (uint);
 
-  function assets() external view returns (address[] memory);
-
   function pausedInvesting() external view returns (bool);
-
-  function readyToClaim() external view returns (uint256[] memory);
-
-  function poolTotalAmount() external view returns (uint256);
 }

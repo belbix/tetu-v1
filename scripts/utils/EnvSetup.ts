@@ -8,6 +8,7 @@ export class EnvSetup {
   public static getEnv(): any {
     // tslint:disable-next-line:no-var-requires
     return require('yargs/yargs')()
+      .env('')
       .options({
         hardhatChainId: {
           type: 'number',

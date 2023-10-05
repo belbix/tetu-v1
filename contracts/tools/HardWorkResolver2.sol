@@ -6,6 +6,7 @@ import "../base/interfaces/ISmartVault.sol";
 import "../base/interfaces/IStrategy.sol";
 import "../openzeppelin/EnumerableSet.sol";
 import "../base/governance/ControllableV2.sol";
+import "../base/interfaces/IBookkeeper.sol";
 
 contract HardWorkResolver2 is ControllableV2 {
   using EnumerableSet for EnumerableSet.AddressSet;
@@ -29,8 +30,6 @@ contract HardWorkResolver2 is ControllableV2 {
   mapping(address => bool) public excludedVaults;
   uint public lastHWCall;
 
-  EnumerableSet.AddressSet internal vaults;
-
   // --- INIT ---
 
   function init(address controller_) external initializer {
@@ -45,10 +44,6 @@ contract HardWorkResolver2 is ControllableV2 {
   modifier onlyOwner() {
     require(msg.sender == owner, "!owner");
     _;
-  }
-
-  function allVaults() external view returns (address[] memory) {
-    return vaults.values();
   }
 
   // --- OWNER FUNCTIONS ---
@@ -88,16 +83,6 @@ contract HardWorkResolver2 is ControllableV2 {
   function changeVaultExcludeStatus(address[] memory _vaults, bool status) external onlyOwner {
     for (uint i; i < _vaults.length; ++i) {
       excludedVaults[_vaults[i]] = status;
-    }
-  }
-
-  function changeVaultStatus(address vault, bool add) external {
-    require(operators[msg.sender], "!operator");
-
-    if (add) {
-      require(vaults.add(vault), 'exist');
-    } else {
-      require(vaults.remove(vault), '!exist');
     }
   }
 
@@ -152,11 +137,13 @@ contract HardWorkResolver2 is ControllableV2 {
     }
 
     uint _delay = delay;
-    uint vaultsLength = vaults.length();
-    address[] memory _vaults = new address[](vaultsLength);
+    IBookkeeper bookkeeper = IBookkeeper(IController(_controller()).bookkeeper());
+    address[] memory vaults = bookkeeper.vaults();
+    address[] memory vaultsDirty = new address[](vaults.length);
+
     uint counter;
-    for (uint i; i < vaultsLength; ++i) {
-      address vault = vaults.at(i);
+    for (uint i; i < vaults.length; ++i) {
+      address vault = vaults[i];
       if (!excludedVaults[vault]) {
 
         uint delayAdjusted = _delay;
@@ -166,7 +153,7 @@ contract HardWorkResolver2 is ControllableV2 {
         }
 
         if (lastHW(vault) + _delay < block.timestamp) {
-          _vaults[i] = vault;
+          vaultsDirty[i] = vault;
           counter++;
         }
       }
@@ -176,9 +163,9 @@ contract HardWorkResolver2 is ControllableV2 {
     } else {
       address[] memory vaultsResult = new address[](counter);
       uint j;
-      for (uint i; i < vaultsLength; ++i) {
-        if (_vaults[i] != address(0)) {
-          vaultsResult[j] = _vaults[i];
+      for (uint i; i < vaultsDirty.length; ++i) {
+        if (vaultsDirty[i] != address(0)) {
+          vaultsResult[j] = vaultsDirty[i];
           ++j;
         }
       }

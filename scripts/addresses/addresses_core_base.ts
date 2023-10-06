@@ -11,3 +11,4 @@ export class BaseCoreAddresses {
 }
 
 // hw resolver https://basescan.org/address/0x11425479f46f2c7914a156443a7982E2F79b8be4#code
+// hard worker 0xfeed6A4B3EeCf206dcC25C60135b9F85bE49247B
